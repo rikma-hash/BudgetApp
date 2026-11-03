@@ -36,3 +36,9 @@
 
 ## Invio nelle finestre (3/11)
 In un `<form method="dialog">` Invio preme il **primo** pulsante: era "Annulla" (o "Elimina" in categorie/abbonamenti), quindi Invio/"Vai" annullava il salvataggio. Ora Annulla/Elimina sono `type="button"` con `data-close="…"` (chiude con quel valore, gestore unico in app.js); `cd-delete` non ha `data-close` per la sua doppia conferma. La finestra "Vuoi eliminare?" (`confirm`) resta con Invio = Annulla, apposta. Nuove finestre: stessa regola.
+
+## Mac spento: Storico vuoto e Budget "azzerato" (3/11)
+- **Cosa**: le copie per il Mac spento si facevano solo delle pagine aperte con il Mac acceso, **in quella stessa app** (icona Home e Safari hanno memorie separate). Aprendo solo la Home, a Mac spento lo Storico diceva "irraggiungibile" e il Piano mostrava i campi vuoti (i dati nel file erano intatti).
+- **Soluzione** (web v35): `warmOffline()` in app.js, 3 s dopo l'avvio e al rientro nell'app (al massimo ogni 10 min), scarica in sottofondo ultimi 6 mesi, anno, risparmi, profilo, piano/categorie/abbonamenti del primo mese pianificabile e fino a 10 viaggi, con gli **stessi percorsi** delle pagine (se cambia un percorso in una pagina, aggiornarlo anche qui). `OFF_MAX` 40 → 60.
+- Provato su copia del file vero a 390 px: memoria vuota, solo Home aperta, poi Mac "spento" → Storico (Novembre, Ottobre, Anno) e Piano con i numeri e l'avviso "si possono solo guardare".
+- Consiglio all'utente: usare sempre l'icona della Home, non Safari.

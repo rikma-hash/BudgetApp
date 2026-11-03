@@ -46,7 +46,7 @@ function toast(msg) {
 
 // ---------- copia locale delle risposte (per vedere i dati con il Mac spento) ----------
 // Ogni lettura riuscita (GET) viene salvata nel telefono; se il Mac non risponde si mostra l'ultima copia.
-const OFF_MAX = 40;
+const OFF_MAX = 60;
 const offKey = (path) => "api:" + path.replace(/([?&])day=[^&]*&?/, "$1").replace(/[?&]$/, "");
 let staleSince = null;  // ora della copia più vecchia mostrata mentre il Mac non risponde
 function offSave(path, value) {
@@ -606,6 +606,31 @@ async function loadOfflinePack() {
     const r = await fetch("/api/offline-pack", { signal: AbortSignal.timeout?.(8000) });
     if (r.ok) { store.set("offline-pack", await r.json()); store.set("pack-time", Date.now()); }
   } catch {}
+}
+
+// La copia per il Mac spento si fa solo delle pagine aperte: con il Mac raggiungibile scarico in sottofondo anche
+// Storico (ultimi mesi e anno), Budget, Risparmi e viaggi, così a Mac spento si vede tutto (stessi percorsi delle pagine).
+async function warmOffline() {
+  if (!online || warmOffline.busy || Date.now() - store.get("warm-time", 0) < 10 * 60e3) return;
+  warmOffline.busy = true;
+  const get = (path) => api(path).catch(() => null);
+  try {
+    const m = await api("/api/months");
+    for (const x of m.months.filter((x) => !x.future).slice(-6)) await get("/api/month?sheet=" + encodeURIComponent(x.sheet));
+    await get("/api/year");
+    await get("/api/insights");
+    await get("/api/profile");
+    const idx = m.months.findIndex((x) => x.sheet === m.current);
+    const target = m.months.find((x, i) => x.editable && (idx < 0 || i >= idx));
+    if (target) {
+      const q = "?sheet=" + encodeURIComponent(target.sheet);
+      await get("/api/budget/proposal?" + new URLSearchParams({ save_rate: 0, sheet: target.sheet }));
+      await get("/api/categories" + q);
+      await get("/api/subscriptions" + q);
+    }
+    for (const t of ((await get("/api/trips"))?.trips || []).slice(0, 10)) await get("/api/trip?name=" + encodeURIComponent(t.name));
+    if (online) store.set("warm-time", Date.now());
+  } catch {} finally { warmOffline.busy = false; }
 }
 function localSuggest(text, known) {
   const pack = store.get("offline-pack", null);
@@ -1986,6 +2011,7 @@ window.addEventListener("online", () => { flushQueue(); refresh(); });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   flushQueue();
+  setTimeout(warmOffline, 3000);
   // rientrando nell'app (es. dopo una modifica in Excel) ricarico quello che stai guardando
   if (view === "home") refresh();
   else if (view === "history") (histMode === "year" ? loadYear() : monthData && showMonth(monthData.summary.sheet, true));
@@ -2019,6 +2045,7 @@ sendDiag();
 refresh().then(() => {
   flushQueue();
   $("desc-list").innerHTML = (data?.descriptions || []).map((s) => `<option value="${esc(s)}">`).join("");
+  setTimeout(warmOffline, 3000);  // dopo la prima schermata, per non rallentarla
 });
 loadQuick();
 loadTripsCache();

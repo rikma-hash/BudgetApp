@@ -105,3 +105,6 @@
 - `excel.snapshot()` nel worker: `backups/giornalieri/` (60 giorni) e `backups/mensili/` (tutti); salta i file non validi. Provato su copia (ritenzione 60, mesi, file rotto ignorato) e nel server di prova.
 - `LICENSE` MIT (titolare `rikma-hash`, il nome utente GitHub già pubblico). README e GUIDA aggiornati (cartella `backups` da non toccare negli aggiornamenti, come ripristinare).
 - Licenza cambiata subito dopo: l'utente vuole che gli altri **usino** l'app ma **non la modifichino**. `LICENSE` ora è "uso personale" (IT+EN): uso e aggiornamento gratis; vietati modifiche, opere derivate, ridistribuzione modificata e uso commerciale; le impostazioni in `data/` non contano come modifiche.
+
+## 2026-11-03 · Mac spento: Storico e Budget sempre disponibili (app dell'utente + GitHub)
+- `warmOffline()`: con il Mac raggiungibile l'app salva in sottofondo tutte le pagine principali per l'uso a Mac spento (dettagli in 05-problemi-noti). Web v35.
