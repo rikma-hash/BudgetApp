@@ -35,3 +35,7 @@ e un modello vuoto.
 - `scripts/` – manutenzione: `migrate_template.py`, `add_months.py`, `setup_trips.py`, `make_blank.py` (rigenera il modello vuoto)
 - `modello/` – file Excel vuoto da cui partire
 - `brain/` – documentazione completa del progetto (per chi ci lavora, anche Claude)
+- `backups/` – copie di sicurezza del file Excel (create dall'app, mai su GitHub): prima di ogni scrittura, una al giorno, una al mese
+
+## Licenza
+[MIT](LICENSE): puoi usarla, copiarla e modificarla liberamente. È fornita così com'è, senza garanzie.

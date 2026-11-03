@@ -99,3 +99,8 @@
 ## 2026-11-03 · Pulizia prima di rendere pubblico GitHub
 - Dettagli personali (profilo, spese e abbonamenti delle prove) spostati dal brain a `privato.md`; i prompt per Claude (categoria, import) leggono `data/contesto.txt` (`suggest.context()`) invece di una frase fissa sull'utente; immagine `docs/immagini/3-piano.jpg` rifatta con le entrate a lista e cifre inventate.
 - Storia di GitHub sostituita da un unico commit pulito (force push). La vecchia storia resta **solo sul Mac** nel ramo locale `vecchia-storia-privata`: **mai fare push di quel ramo** (né `git push --all`).
+
+## 2026-11-03 · Copie di sicurezza giornaliere/mensili e licenza (app dell'utente + GitHub)
+- Parere "da veterano": i punti deboli principali erano le copie solo prima delle scritture dell'app (niente protezione dai danni di Excel, niente storia lunga) e la mancanza di licenza.
+- `excel.snapshot()` nel worker: `backups/giornalieri/` (60 giorni) e `backups/mensili/` (tutti); salta i file non validi. Provato su copia (ritenzione 60, mesi, file rotto ignorato) e nel server di prova.
+- `LICENSE` MIT (titolare `rikma-hash`, il nome utente GitHub già pubblico). README e GUIDA aggiornati (cartella `backups` da non toccare negli aggiornamenti, come ripristinare).

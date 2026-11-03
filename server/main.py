@@ -214,6 +214,11 @@ def _worker():
     last_subs = 0.0
     while True:
         try:
+            for p in X.snapshot(XLSX, BACKUPS, dt.date.today()):
+                print("copia di sicurezza:", p.name)
+        except Exception as err:
+            print("copia di sicurezza:", err)
+        try:
             _flush_pending()
         except Exception as err:
             print("flush:", err)

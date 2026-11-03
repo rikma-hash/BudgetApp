@@ -86,8 +86,9 @@ fai il login e chiudi con `/exit`. Poi rilancia l'installatore. Senza Claude l'a
 
 ## Aggiornare l'app
 1. Scarica di nuovo lo ZIP (Passo 1).
-2. Copia i file nuovi **sopra** la tua cartella BudgetApp, ma **non toccare** la cartella `data` (dentro ci sono le correzioni
-   che l'app ha imparato e le spese in coda). Il tuo file Excel non è nella cartella, quindi è al sicuro.
+2. Copia i file nuovi **sopra** la tua cartella BudgetApp, ma **non toccare** le cartelle `data` (dentro ci sono le correzioni
+   che l'app ha imparato e le spese in coda) e `backups` (le copie di sicurezza). Il tuo file Excel non è nella cartella,
+   quindi è al sicuro.
 3. Rilancia l'installatore (Passo 3).
 4. Sul telefono l'app si aggiorna da sola alla prima apertura con il computer acceso.
 
@@ -98,6 +99,7 @@ fai il login e chiudi con `/exit`. Poi rilancia l'installatore. Senza Claude l'a
 | Safari *"non trova il server"* | Tailscale spento sul telefono, oppure **Relay privato di iCloud** attivo (Impostazioni › il tuo nome › iCloud › Relay privato). |
 | Schermo vuoto o versione vecchia | Computer acceso › ⚙️ › Uso con il Mac spento › **🔄 Ripristina l'app**, poi chiudi e riapri. |
 | Le spese non arrivano nel file | Chiudi **Excel** sul computer: mentre è aperto l'app le tiene in coda e le scrive appena lo chiudi. |
+| Il file Excel si è rovinato o hai cancellato qualcosa | Nella cartella `BudgetApp/backups` ci sono le copie: una **prima di ogni modifica** dell'app (ultime 50), una **al giorno** in `giornalieri` (ultimi 60 giorni) e una **al mese** in `mensili` (tutte). Chiudi Excel, spegni il computer o l'app, e copia quella giusta al posto del tuo file (rinominala come l'originale). |
 | Altro | Il computer tiene un registro in `BudgetApp/logs/server.log`: mandalo a chi ti ha passato l'app. |
 
 ## Disinstallare

@@ -20,7 +20,7 @@ Mac (browser)  ─────────────────────�
 | Server | `server/main.py` (API), `excel.py` (lettura/scrittura fogli mese), `trips.py` (viaggi), `suggest.py` (categorie), `advisor.py` (budget e risparmi), `keywords.json` (negozi → categoria) |
 | Interfaccia | `web/index.html`, `web/app.js`, `web/style.css`, `web/sw.js` (offline), icone |
 | Dati dell'app (mai su GitHub) | `data/learned.json` (correzioni imparate), `data/keywords_local.json` (parole chiave personali), `data/profile.json` (quiz), `data/contesto.txt` (contesto per Claude), `data/pending.json` (coda se Excel è aperto), `data/done_ids.json` (anti-doppioni) |
-| Backup automatici | `backups/` (ultime 50 copie, una prima di ogni scrittura) · `backups/originale/` (copie storiche da non cancellare) |
+| Backup automatici | `backups/` (ultime 50 copie, una prima di ogni scrittura) · `backups/giornalieri/` (60 giorni) · `backups/mensili/` (tutti) · `backups/originale/` (copie storiche da non cancellare) |
 | Script una tantum | `scripts/migrate_template.py`, `scripts/add_months.py`, `scripts/setup_trips.py` |
 | Avvio automatico | `launchd/com.budgetapp.server.plist` (locale, non su GitHub; modello: `launchd/com.budgetapp.server.plist.example`), copiato in `~/Library/LaunchAgents/` |
 | Log | `logs/server.log` |

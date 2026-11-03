@@ -35,6 +35,7 @@ Sequenza di ripristino completo (server fermo, Excel chiuso ovunque): migrate �
 
 ## Backup
 - `backups/Budget_Tracker_Modello-AAAAMMGG-HHMMSS.xlsx`: stato **prima** di ogni scrittura (ultime 50).
+- `backups/giornalieri/…-AAAA-MM-GG.xlsx` (ultimi 60) e `backups/mensili/…-AAAA-MM.xlsx` (tutti): `excel.snapshot()`, chiamata dal worker ogni 20 s; copia solo se quella del giorno/mese manca e se il file è uno zip valido. Coprono anche i danni fatti da **Excel** (che non passano da `save`).
 - `backups/originale/`: `…PRIMA-DELLA-MIGRAZIONE.xlsx` (file originale dell'utente), `…ripristinato-1553.xlsx` (versione rimessa da Excel il 1/11).
 - Per tornare indietro: fermare il server, chiudere Excel, copiare il backup sopra `$R`, riavviare.
 

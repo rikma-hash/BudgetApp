@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 import shutil
+import zipfile
 from copy import copy
 from pathlib import Path
 
@@ -73,6 +74,23 @@ def save(wb: openpyxl.Workbook, path: Path, backup_dir: Path, keep: int = 50) ->
     except PermissionError as err:  # Windows: il file è aperto in Excel, che lo tiene bloccato
         tmp.unlink(missing_ok=True)
         raise ExcelLocked(str(path)) from err
+
+
+def snapshot(path: Path, backup_dir: Path, day: dt.date, keep_days: int = 60) -> list[Path]:
+    """Copia del giorno (ultime `keep_days`) e copia del mese (tenute tutte), anche se l'app non scrive.
+    Protegge anche dalle modifiche fatte da Excel. Salta i file illeggibili (es. a metà sincronizzazione iCloud)."""
+    if not path.exists() or not zipfile.is_zipfile(path):
+        return []
+    made = []
+    for sub, name in (("giornalieri", day.isoformat()), ("mensili", day.strftime("%Y-%m"))):
+        target = backup_dir / sub / f"{path.stem}-{name}{path.suffix}"
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+            made.append(target)
+    for old in sorted((backup_dir / "giornalieri").glob(f"{path.stem}-*{path.suffix}"))[:-keep_days]:
+        old.unlink()
+    return made
 
 
 # ---------- riconoscimento fogli ----------
