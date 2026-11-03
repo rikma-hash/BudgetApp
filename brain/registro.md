@@ -104,3 +104,4 @@
 - Parere "da veterano": i punti deboli principali erano le copie solo prima delle scritture dell'app (niente protezione dai danni di Excel, niente storia lunga) e la mancanza di licenza.
 - `excel.snapshot()` nel worker: `backups/giornalieri/` (60 giorni) e `backups/mensili/` (tutti); salta i file non validi. Provato su copia (ritenzione 60, mesi, file rotto ignorato) e nel server di prova.
 - `LICENSE` MIT (titolare `rikma-hash`, il nome utente GitHub già pubblico). README e GUIDA aggiornati (cartella `backups` da non toccare negli aggiornamenti, come ripristinare).
+- Licenza cambiata subito dopo: l'utente vuole che gli altri **usino** l'app ma **non la modifichino**. `LICENSE` ora è "uso personale" (IT+EN): uso e aggiornamento gratis; vietati modifiche, opere derivate, ridistribuzione modificata e uso commerciale; le impostazioni in `data/` non contano come modifiche.

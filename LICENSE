@@ -1,21 +1,34 @@
-MIT License
+BudgetApp – Licenza d'uso personale / Personal Use License
+Copyright (c) 2026 rikma-hash. Tutti i diritti riservati / All rights reserved.
 
-Copyright (c) 2026 rikma-hash
+ITALIANO
+Puoi, gratuitamente:
+  - scaricare e installare questo software sui tuoi dispositivi;
+  - usarlo per gestire le tue spese personali;
+  - aggiornarlo con le nuove versioni pubblicate in questo repository.
+Le impostazioni previste dall'app (per esempio i file nella cartella `data/`) non sono considerate modifiche.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Non puoi, senza un permesso scritto del titolare:
+  - modificare, adattare o tradurre il codice, né crearne opere derivate;
+  - pubblicare, distribuire o condividere versioni modificate;
+  - vendere il software o usarlo a scopo commerciale;
+  - togliere o cambiare questo avviso.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Il software è fornito "così com'è", senza garanzie di alcun tipo. Il titolare non è responsabile di danni
+o perdite di dati derivanti dal suo uso.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+ENGLISH
+You may, free of charge:
+  - download and install this software on your own devices;
+  - use it to manage your personal expenses;
+  - update it with new versions published in this repository.
+Settings provided by the app (for example the files in the `data/` folder) are not considered modifications.
+
+Without written permission from the copyright holder you may not:
+  - modify, adapt or translate the code, or create derivative works;
+  - publish, distribute or share modified versions;
+  - sell the software or use it for commercial purposes;
+  - remove or alter this notice.
+
+The software is provided "as is", without warranty of any kind. The copyright holder is not liable for any
+damage or data loss arising from its use.

@@ -38,4 +38,5 @@ e un modello vuoto.
 - `backups/` – copie di sicurezza del file Excel (create dall'app, mai su GitHub): prima di ogni scrittura, una al giorno, una al mese
 
 ## Licenza
-[MIT](LICENSE): puoi usarla, copiarla e modificarla liberamente. È fornita così com'è, senza garanzie.
+[Uso personale](LICENSE): puoi scaricarla, installarla e usarla gratis per le tue spese. **Non** puoi modificarla,
+ridistribuirla modificata né venderla senza permesso. È fornita così com'è, senza garanzie.
