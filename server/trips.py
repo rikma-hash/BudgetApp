@@ -324,6 +324,24 @@ def set_budget(ws: Worksheet, category: str, value: float) -> None:
     raise KeyError(f"Categoria del viaggio '{category}' non trovata")
 
 
+def copy_budgets(wb: openpyxl.Workbook, ws: Worksheet, source: Worksheet) -> int:
+    """Copia categorie e budget di un altro viaggio: aggiorna quelle che ci sono già, aggiunge le mancanti
+    (finché c'è posto). Le categorie del viaggio che l'altro non ha restano come sono."""
+    have = [c for c, _ in categories(ws)]
+    copied = 0
+    for cat, budget in categories(source):
+        name = X.canonical(cat, have)
+        if name:
+            set_budget(ws, name, budget)
+        else:
+            try:
+                have.append(add_category(wb, ws, cat, budget))
+            except ValueError:  # viaggio pieno
+                continue
+        copied += 1
+    return copied
+
+
 def add_category(wb: openpyxl.Workbook, ws: Worksheet, name: str, budget: float = 0.0) -> str:
     """Aggiunge una categoria al viaggio: usa una riga vuota della tabella o fa scendere la riga TOTALE."""
     name = re.sub(r"\s+", " ", name).strip()

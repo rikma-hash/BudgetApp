@@ -19,6 +19,18 @@ const EXACT = {
   "Tocca un mese per vederne le spese.": "Tap a month to see its expenses.", "Budget": "Budget", "Piano": "Plan",
   "Risparmi": "Savings", "Home": "Home", "Viaggi": "Trips", "‹ Storico": "‹ History", "‹ Home": "‹ Home", "‹ Viaggi": "‹ Trips",
   "Caricamento…": "Loading…", "Carico…": "Loading…",
+  // piano: colonne, totali, allarme · viaggi: copia budget · rate
+  "Proposto": "Proposed", "Messo": "Set", "Dovresti avere": "You should have", "Proposto (somma)": "Proposed (total)",
+  "Messo ora (somma)": "Set now (total)", "Aggiusta": "Adjust", "Ignora": "Ignore", "Salva lo stesso": "Save anyway",
+  "Le categorie sono più di quello che puoi spendere. Salvo lo stesso? (Annulla e tocca Aggiusta per farle rientrare.)":
+    "The categories add up to more than you can spend. Save anyway? (Cancel and tap Adjust to fit them.)",
+  "✓ Categorie aggiustate: rientri in quello che puoi spendere": "✓ Categories adjusted: you're within what you can spend",
+  "Copia categorie e budget da": "Copy categories and budget from", "Nessuno": "None",
+  "Il budget per categoria lo puoi cambiare dopo, dentro al viaggio.": "You can change the budget per category later, inside the trip.",
+  "📋 Copia budget da un altro viaggio": "📋 Copy budget from another trip", "Copia budget": "Copy budget", "Copia": "Copy", "Da": "From",
+  "Prendo categorie e budget da un altro viaggio. Quelle che ci sono già cambiano budget, le altre si aggiungono.":
+    "I take categories and budgets from another trip. Existing ones get the new budget, the others are added.",
+  "Non ci sono altri viaggi da cui copiare": "There are no other trips to copy from",
   // home
   "Imposta il budget": "Set the budget", "Oggi": "Today", "Ieri": "Yesterday", "Questa settimana": "This week",
   "Non hai ancora impostato il budget del mese.": "You haven't set this month's budget yet.",
@@ -176,6 +188,13 @@ const EXACT = {
 
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
+  [/^Superi di (.+)$/, "Over by $1"],
+  [/^⚠️ Le categorie superano di (.+) quello che puoi spendere\.$/, "⚠️ The categories exceed what you can spend by $1."],
+  [/^Le categorie superano di (.+) quello che puoi spendere \(hai scelto di ignorarlo\)\.$/, "The categories exceed what you can spend by $1 (you chose to ignore it)."],
+  [/^Ho abbassato le variabili, ma le spese fisse superano ancora di (.+)$/, "I lowered the variable ones, but fixed costs still exceed by $1"],
+  [/^✓ Copiate (\d+) categorie da (.+)$/, "✓ Copied $1 categories from $2"],
+  [/^ per (\d+) mesi · da (.+) a (.+)$/, " for $1 months · from $2 to $3"],
+  [/^Una rata al mese per (\d+) mesi, a partire dalla data scelta\. Scrivi l'importo per vedere quanto al mese\.$/, "One instalment a month for $1 months, from the chosen date. Enter the amount to see how much a month."],
   [/^Togliere (.+)\?$/, "Remove $1?"],
   [/^(.+) tolta · premi «Usa questo budget» per salvare$/, "$1 removed · tap «Use this budget» to save"],
   [/^(\d+) (?:spesa|spese) in attesa di essere scritte$/, (m, n) => `${n} ${n === "1" ? "expense" : "expenses"} waiting to be written`],
@@ -262,6 +281,7 @@ const PATTERNS = [
   [/^(.+) in un anno$/, "$1 in a year"],
   [/^(.+) · (\d+) (spesa|spese)$/, (m, a, n) => `${tr(a)} · ${n} ${n === "1" ? "expense" : "expenses"}`],
   [new RegExp(`^(${MONTHS_IT.join("|")})( \\d{4})?$`), (m, mo, y) => MONTHS_EN[MONTHS_IT.indexOf(mo)] + (y || "")],
+  [/^(.+) al mese$/, "$1 a month"],  // generica: in fondo, dopo le frasi più precise
 ];
 
 // pezzi che compaiono dentro frasi più lunghe (dati inclusi), sostituiti ovunque

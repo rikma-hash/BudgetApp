@@ -111,3 +111,9 @@
 
 ## 2026-11-03 · Piano: risparmio e deficit non tornano più al 10% (app dell'utente + GitHub)
 - La % di risparmio non era salvata da nessuna parte e il deficit solo con Salva: ora le scelte del piano si ricordano per ogni mese in `profile.json` (vedi 03). Web v36. Provato su copia a 390 px: Nov 20% + deficit ignorato, Dic 123 € + deficit sottratto → dopo la riapertura uguali, Gennaio (mai toccato) prende il 20%, Salva le lascia com'erano.
+
+## 2026-11-04 · 5 richieste dell'utente (app dell'utente + GitHub)
+- ＋: nome facoltativo (si usa la categoria) e la categoria toccata a mano non cambia più scrivendo il nome. Anteprima rate più chiara (cifra al mese + elenco mesi).
+- Piano: colonne Proposto | Messo, totali Dovresti avere / Proposto / Messo ora; allarme sforamento con Aggiusta / Ignora e conferma al Salva.
+- Viaggi: copia di categorie e budget da un altro viaggio, alla creazione e con un pulsante nel viaggio.
+- Provato su copia del file vero a 390 px (tutto quanto sopra, nomi lunghi che vanno a capo). Web v38.

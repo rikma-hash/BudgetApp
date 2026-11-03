@@ -12,7 +12,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/style.css?v=36">
+<link rel="stylesheet" href="/static/style.css?v=38">
 <script>
   try {
     const p = JSON.parse(localStorage.getItem("prefs") || "{}");
@@ -307,7 +307,9 @@
       <div class="card" id="trip-new" hidden>
         <h2>Nuovo viaggio</h2>
         <input class="desc" id="trip-name" placeholder="Dove vai? (es. Berlino)" autocapitalize="words">
-        <p class="hint">Il budget per categoria lo imposti dopo, dentro al viaggio.</p>
+        <label class="field" id="trip-copy-row" hidden><span>Copia categorie e budget da</span>
+          <select id="trip-copy-from" aria-label="Viaggio da copiare"></select></label>
+        <p class="hint">Il budget per categoria lo puoi cambiare dopo, dentro al viaggio.</p>
         <button class="primary big" id="trip-create" type="button">Crea viaggio</button>
       </div>
       <div id="trip-cards"></div>
@@ -328,6 +330,7 @@
         <p class="hint">Tocca una categoria per impostarne il budget.</p>
         <ul class="cat-list" id="trip-cats"></ul>
         <button type="button" class="secondary" id="trip-cat-add">＋ Nuova categoria</button>
+        <button type="button" class="secondary" id="trip-copy-btn">📋 Copia budget da un altro viaggio</button>
       </div>
 </div><div class="col">
       <div class="card">
@@ -434,6 +437,18 @@
   </form>
 </dialog>
 
+<dialog id="copydlg" class="small-dialog">
+  <form method="dialog">
+    <h3>Copia budget</h3>
+    <p>Prendo categorie e budget da un altro viaggio. Quelle che ci sono già cambiano budget, le altre si aggiungono.</p>
+    <label class="field"><span>Da</span> <select id="copy-src" aria-label="Viaggio da copiare"></select></label>
+    <div class="dlg-actions">
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Copia</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="numdlg" class="small-dialog">
   <form method="dialog">
     <h3 id="num-title">Budget</h3>
@@ -478,7 +493,7 @@
 </dialog>
 
 <div id="toast" role="status"></div>
-<script src="/static/i18n.js?v=36"></script>
-<script src="/static/app.js?v=36"></script>
+<script src="/static/i18n.js?v=38"></script>
+<script src="/static/app.js?v=38"></script>
 </body>
 </html>

@@ -2,8 +2,8 @@
 // Strategia "prima la copia": la pagina e i suoi file arrivano SUBITO dalla copia salvata (anche a Mac spento,
 // e senza attese che su iPhone, aprendo l'icona della Home, lasciano lo schermo vuoto); in sottofondo si scarica
 // la versione dal Mac e si aggiorna la copia. Quando esce una versione nuova di questo file l'app si ricarica da sola.
-const CACHE = "spese-v36";
-const SHELL = ["/", "/static/i18n.js?v=36", "/static/app.js?v=36", "/static/style.css?v=36", "/manifest.webmanifest", "/static/icon.svg", "/static/icon-180.png", "/static/icon-512.png"];
+const CACHE = "spese-v38";
+const SHELL = ["/", "/static/i18n.js?v=38", "/static/app.js?v=38", "/static/style.css?v=38", "/manifest.webmanifest", "/static/icon.svg", "/static/icon-180.png", "/static/icon-512.png"];
 
 // "scatola nera": ultimi eventi, letti dall'app e mandati al Mac quando torna raggiungibile (/api/diag)
 let diagQueue = Promise.resolve();

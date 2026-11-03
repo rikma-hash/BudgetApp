@@ -626,12 +626,17 @@ class TripIn(BaseModel):
     name: str = Field(min_length=1)
     budgets: dict[str, float] = {}
     note: str | None = None
+    copy_from: str | None = None  # viaggio da cui copiare categorie e budget
 
 
 @app.post("/api/trips")
 def trip_create(body: TripIn):
-    name = write(lambda wb: T.create(wb, body.name, body.budgets, body.note).title[len(T.PREFIX):])
-    return {"status": "ok", "name": name}
+    def change(wb):
+        ws = T.create(wb, body.name, body.budgets, body.note)
+        if body.copy_from:
+            T.copy_budgets(wb, ws, T.get(wb, body.copy_from))
+        return ws.title[len(T.PREFIX):]
+    return {"status": "ok", "name": write(change)}
 
 
 class TripName(BaseModel):
@@ -720,6 +725,19 @@ class TripCategory(BaseModel):
 def trip_category(body: TripCategory):
     name = write(lambda wb: T.add_category(wb, T.get(wb, body.trip), body.name, body.budget))
     return {"status": "ok", "name": name}
+
+
+class TripCopy(BaseModel):
+    trip: str
+    source: str
+
+
+@app.post("/api/trips/copy-budget")
+def trip_copy_budget(body: TripCopy):
+    if body.trip == body.source:
+        raise HTTPException(400, "Scegli un altro viaggio")
+    n = write(lambda wb: T.copy_budgets(wb, T.get(wb, body.trip), T.get(wb, body.source)))
+    return {"status": "ok", "copied": n}
 
 
 # ---------- import estratto conto (CSV / PDF) ----------
