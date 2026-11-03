@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Spese</title>
+<meta name="theme-color" content="#f4f3ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141517" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Spese">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v=33">
+<script>
+  try {
+    const p = JSON.parse(localStorage.getItem("prefs") || "{}");
+    const r = document.documentElement;
+    if (p.theme && p.theme !== "auto") r.dataset.theme = p.theme;
+    if (p.accent && p.accent !== "green") r.dataset.accent = p.accent;
+    if (p.size && p.size !== "normal") r.dataset.size = p.size;
+  } catch {}
+</script>
+</head>
+<body>
+
+<!-- si vede finché l'app non è partita: niente più schermo vuoto, e la scatola nera annota cosa succede -->
+<div id="boot" style="position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px;font:16px -apple-system,sans-serif;color:#74777d">
+  <div><div style="font-size:40px">💶</div><p id="boot-text">Apro l'app…</p></div>
+</div>
+<script>
+  (function () {
+    const log = (m) => { try { const a = JSON.parse(localStorage.getItem("diag-app") || "[]"); a.push({ t: Date.now(), m }); localStorage.setItem("diag-app", JSON.stringify(a.slice(-60))); } catch {} };
+    window.__diag = log;
+    log("avvio pagina · sw " + (navigator.serviceWorker && navigator.serviceWorker.controller ? "attivo" : "assente") + " · " + location.href);
+    window.addEventListener("error", (e) => log("errore: " + (e.message || e.target && (e.target.src || e.target.href) || "?")
+      + (e.filename ? " @ " + e.filename.split("/").pop() + ":" + e.lineno + ":" + e.colno : "") + (e.error && e.error.stack ? " · " + String(e.error.stack).slice(0, 300) : "")), true);
+    window.addEventListener("unhandledrejection", (e) => log("promessa: " + String(e.reason && (e.reason.stack || e.reason.message) || e.reason).slice(0, 400)));
+    setTimeout(() => {
+      if (window.__appStarted) return;
+      log("app non partita dopo 8 s");
+      const t = document.getElementById("boot-text");
+      if (t) t.innerHTML = "L'app non riesce a partire.<br>Se il Mac è spento, riaccendilo e riapri l'app una volta: poi riproviamo.";
+    }, 8000);
+  })();
+</script>
+
+<div class="status" id="status" hidden></div>
+
+<main>
+  <!-- ================= HOME ================= -->
+  <section class="view" id="view-home">
+    <header class="page-head row">
+      <div><p class="eyebrow" id="home-month">—</p>
+      <h1 id="home-title">Ciao!</h1></div>
+      <button class="pill-btn icon-btn" type="button" data-go="settings" aria-label="Impostazioni">⚙️</button>
+    </header>
+
+<div class="cols"><div class="col">
+    <div class="hero card" id="hero"></div>
+    <div class="alerts" id="home-alerts" hidden></div>
+    <div class="excl" id="home-excl"></div>
+
+    <div class="card">
+      <div class="card-head"><h2>Categorie</h2><button class="text-btn" data-go="history">Tutto →</button></div>
+      <ul class="cat-list" id="home-cats"></ul>
+    </div>
+
+</div><div class="col">
+    <div class="card">
+      <div class="card-head"><h2>Ultime spese</h2><button class="text-btn" data-go="history">Storico →</button></div>
+      <ul class="tx-list" id="home-recent"></ul>
+    </div>
+</div></div>
+  </section>
+
+  <!-- ================= STORICO ================= -->
+  <section class="view" id="view-history" hidden>
+    <header class="page-head row">
+      <h1>Storico</h1>
+      <div class="head-btns">
+        <button class="pill-btn" type="button" data-go="import">📥 Importa</button>
+        <button class="pill-btn excel-btn" type="button">📗 Excel</button>
+      </div>
+    </header>
+    <div class="seg" id="history-seg">
+      <button data-mode="month" class="on">Mese</button>
+      <button data-mode="year">Anno</button>
+    </div>
+
+    <div id="hist-month">
+      <div class="pills" id="month-pills"></div>
+<div class="cols"><div class="col">
+      <div class="card summary-line" id="month-summary"></div>
+      <div class="excl" id="month-excl"></div>
+      <div class="group-head"><span>Speso e budget per categoria</span></div>
+      <div class="card"><ul class="cat-list" id="month-cats"></ul></div>
+</div><div class="col">
+      <div class="pills small" id="cat-pills"></div>
+      <div id="month-list"></div>
+</div></div>
+    </div>
+
+    <div id="hist-year" hidden>
+      <div class="stat-row" id="year-stats"></div>
+      <div id="year-list"></div>
+      <p class="hint center">Tocca un mese per vederne le spese.</p>
+    </div>
+  </section>
+
+  <!-- ================= BUDGET ================= -->
+  <section class="view" id="view-budget" hidden>
+    <header class="page-head"><h1>Budget</h1></header>
+    <div class="seg" id="budget-seg">
+      <button data-mode="plan" class="on">Piano</button>
+      <button data-mode="cats">Categorie</button>
+      <button data-mode="sav">Risparmi</button>
+    </div>
+    <div class="pills" id="budget-pills"></div>
+
+    <div id="bud-plan" class="stack">
+
+<div class="cols"><div class="col">
+    <div class="card ladder" id="plan-ladder"></div>
+
+    <details class="card quiz" id="plan-quiz">
+      <summary><span class="emoji">🎯</span><span class="q-text"><b>Rendi la proposta più tua</b><small id="quiz-state">5 domande veloci</small></span><i>›</i></summary>
+      <div id="quiz-list"></div>
+    </details>
+
+</div><div class="col">
+    <div class="card step">
+      <h2><span class="num">1</span> <span id="step1-title">Quanto ti entra questo mese?</span></h2>
+      <div id="inc-fixed">
+        <label class="field">🎓 Borsa di studio <input id="inc-borsa" inputmode="decimal" placeholder="0"></label>
+        <label class="field">👤 Budget personale <input id="inc-personale" inputmode="decimal" placeholder="0"></label>
+        <label class="field">🤝 Aiuto famiglia <input id="inc-famiglia" inputmode="decimal" placeholder="0"></label>
+        <label class="field">💶 Altro <input id="inc-altro" inputmode="decimal" placeholder="0"></label>
+      </div>
+      <div id="inc-free" hidden>
+        <ul class="tx-list inc-list" id="inc-list"></ul>
+        <p class="hint" id="inc-empty">Nessuna entrata ancora: aggiungi borsa, stipendio, aiuto da casa…</p>
+        <button type="button" class="secondary" id="inc-add">＋ Aggiungi entrata</button>
+        <p class="hint" id="inc-tip">Per togliere un'entrata scorrila a sinistra, oppure toccane il nome.</p>
+      </div>
+      <div class="carry-box" id="carry-box">
+        <label class="field"><span>📊 <span id="carry-label">Surplus/deficit mesi scorsi</span></span>
+          <input id="inc-riporto" inputmode="decimal" placeholder="0"></label>
+        <p class="hint" id="carry-hint"></p>
+        <div class="seg" id="carry-seg">
+          <button type="button" data-use="1" id="carry-yes">Aggiungi</button>
+          <button type="button" data-use="0" class="on">Ignora</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card step">
+      <h2><span class="num">2</span> Quanto vuoi mettere da parte?</h2>
+      <div class="pills" id="save-pills">
+        <button data-rate="0">Niente</button><button data-rate="5">5%</button><button data-rate="10" class="on">10%</button>
+        <button data-rate="15">15%</button><button data-rate="20">20%</button>
+      </div>
+      <label class="field">💰 Oppure scrivi quanto <input id="save-amount" inputmode="decimal" placeholder="0"></label>
+      <div class="save-result" id="save-line"></div>
+    </div>
+
+    <div class="card step">
+      <h2><span class="num">3</span> Dividi tra le categorie</h2>
+      <p class="sub">Ti propongo le cifre in base a quanto spendi di solito. Puoi cambiarle tutte.</p>
+      <ul class="notes" id="prop-notes"></ul>
+      <ul class="budget-list" id="prop-list"></ul>
+      <button type="button" class="secondary" id="prop-add-new">＋ Nuova categoria</button>
+      <div class="total-bar" id="prop-total"></div>
+      <label class="check"><input type="checkbox" id="apply-following"> <span id="apply-following-text">Usa lo stesso budget anche per i mesi dopo</span></label>
+      <button class="primary big" id="apply-budget" type="button">Usa questo budget</button>
+    </div>
+</div></div>
+    </div>
+
+    <div id="bud-cats" class="stack" hidden>
+      <div class="card">
+        <h2>Le tue categorie</h2>
+        <p class="sub">Tocca una categoria per rinominarla, cambiarne il budget o eliminarla. Nome ed eliminazione valgono per tutti i mesi; il budget per il mese scelto sopra.</p>
+        <ul class="cat-pick manage" id="cat-manage"></ul>
+        <button type="button" class="secondary" id="cat-add">＋ Nuova categoria</button>
+      </div>
+      <div class="card">
+        <h2>💳 Abbonamenti</h2>
+        <p class="sub">Accendi quelli che vuoi inserire in automatico: ogni mese, nel loro giorno, diventano da soli una spesa nella categoria Abbonamenti. Tocca il nome per modificarlo.</p>
+        <ul class="cat-pick manage subs" id="subs-list"></ul>
+        <button type="button" class="secondary" id="subs-add">＋ Nuovo abbonamento</button>
+      </div>
+    </div>
+
+    <div id="bud-sav" class="stack" hidden>
+
+<div class="cols"><div class="col">
+    <div class="hero card" id="sav-hero"></div>
+    <div class="card">
+      <h2 id="pace-title">📅 Questo mese</h2>
+      <div id="pace"></div>
+    </div>
+    <div class="card" id="btips-card">
+      <h2>🎯 Consigli sul budget</h2>
+      <p class="sub">Categorie dove il budget non corrisponde a quanto spendi davvero.</p>
+      <div id="btips"></div>
+    </div>
+</div><div class="col">
+    <div class="card">
+      <h2>💡 Dove puoi risparmiare</h2>
+      <p class="sub">Tocca › per vedere i dettagli.</p>
+      <div id="tips"></div>
+      <button type="button" class="secondary" id="ask-advice" hidden>✨ Chiedi un consiglio a Claude</button>
+      <div id="advice" class="advice" hidden></div>
+    </div>
+    <div class="card">
+      <h2>Mese per mese</h2>
+      <div id="sav-months"></div>
+    </div>
+    <div class="card">
+      <h2>Su cosa spendi di più</h2>
+      <div id="themes"></div>
+    </div>
+</div></div>
+    </div>
+  </section>
+
+  <!-- ================= IMPORTA ESTRATTO CONTO ================= -->
+  <section class="view" id="view-import" hidden>
+    <header class="page-head">
+      <button class="text-btn" type="button" data-go="history">‹ Storico</button>
+      <h1>Importa spese</h1>
+      <p class="sub">Dall'estratto conto della banca o dai movimenti della carta.</p>
+    </header>
+    <div class="card" id="imp-start">
+      <ol class="how-list">
+        <li>Nell'app della banca o della carta scarica i movimenti in <b>CSV</b> (va meglio) oppure in <b>PDF</b>.</li>
+        <li>Salvalo in File: <i>Condividi › Salva su File</i>.</li>
+        <li>Sceglilo qui sotto: ti mostro le spese con la categoria già proposta, tu controlli e confermi.</li>
+      </ol>
+      <label class="primary big file-btn">📄 Scegli il file<input type="file" id="imp-file" accept=".csv,.pdf,.txt,text/csv,application/pdf"></label>
+      <p class="hint center" id="imp-status"></p>
+    </div>
+    <div id="imp-review" class="stack" hidden>
+      <div class="card">
+        <div class="summary-line" id="imp-summary"></div>
+        <p class="hint" id="imp-note"></p>
+        <div class="imp-tools"><button type="button" class="text-btn" id="imp-all">Seleziona tutte</button>
+          <button type="button" class="text-btn" id="imp-none">Nessuna</button>
+          <button type="button" class="text-btn" id="imp-other">Altro file</button></div>
+        <button class="primary big" type="button" id="imp-save">Aggiungi</button>
+      </div>
+      <div id="imp-list"></div>
+      <button class="primary big" type="button" id="imp-save2">Aggiungi</button>
+    </div>
+  </section>
+
+  <!-- ================= IMPOSTAZIONI ================= -->
+  <section class="view" id="view-settings" hidden>
+    <header class="page-head">
+      <button class="text-btn" type="button" data-go="home">‹ Home</button>
+      <h1>Impostazioni</h1>
+      <p class="sub">Valgono per questo dispositivo (iPhone e Mac si impostano a parte).</p>
+    </header>
+    <div class="card">
+      <h2>Uso con il Mac spento</h2>
+      <div id="offline-check"><p class="hint">Controllo…</p></div>
+    </div>
+    <div class="card">
+      <h2>Lingua</h2>
+      <div class="seg" id="set-lang">
+        <button type="button" data-v="it">🇮🇹 Italiano</button><button type="button" data-v="en">🇬🇧 English</button>
+      </div>
+      <p class="hint">Le parole dell'app. Categorie, descrizioni e file Excel restano come li hai scritti.</p>
+    </div>
+    <div class="card">
+      <h2>Tema</h2>
+      <div class="seg" id="set-theme">
+        <button type="button" data-v="auto">Automatico</button><button type="button" data-v="light">Chiaro</button><button type="button" data-v="dark">Scuro</button>
+      </div>
+      <p class="hint">Automatico segue il telefono (chiaro di giorno, scuro di sera se l'hai impostato così).</p>
+    </div>
+    <div class="card">
+      <h2>Colore</h2>
+      <div class="swatches" id="set-accent"></div>
+    </div>
+    <div class="card">
+      <h2>Dimensione del testo</h2>
+      <div class="seg" id="set-size">
+        <button type="button" data-v="normal">Normale</button><button type="button" data-v="large">Grande</button><button type="button" data-v="xl">Molto grande</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Pagina iniziale</h2>
+      <div class="seg" id="set-start">
+        <button type="button" data-v="home">Home</button><button type="button" data-v="history">Storico</button><button type="button" data-v="budget">Budget</button>
+      </div>
+      <p class="hint">La schermata che si apre quando avvii l'app.</p>
+    </div>
+  </section>
+
+  <!-- ================= VIAGGI ================= -->
+  <section class="view" id="view-trips" hidden>
+    <div id="trips-list" class="stack">
+      <header class="page-head row"><h1>Viaggi</h1><button class="pill-btn" id="trip-new-btn" type="button">＋ Nuovo</button></header>
+      <div class="card" id="trip-new" hidden>
+        <h2>Nuovo viaggio</h2>
+        <input class="desc" id="trip-name" placeholder="Dove vai? (es. Berlino)" autocapitalize="words">
+        <p class="hint">Il budget per categoria lo imposti dopo, dentro al viaggio.</p>
+        <button class="primary big" id="trip-create" type="button">Crea viaggio</button>
+      </div>
+      <div id="trip-cards"></div>
+      <p class="hint center">Le spese di un viaggio finiscono nel suo foglio Excel; il totale entra da solo nella categoria Viaggi del mese.</p>
+    </div>
+
+    <div id="trip-detail" class="stack" hidden>
+      <header class="page-head">
+        <button class="text-btn" id="trip-back" type="button">‹ Viaggi</button>
+        <h1 id="trip-title">—</h1>
+        <p class="sub" id="trip-dates"></p>
+      </header>
+<div class="cols"><div class="col">
+      <div class="hero card" id="trip-hero"></div>
+      <button class="primary big" id="trip-add" type="button">＋ Aggiungi spesa al viaggio</button>
+      <div class="card">
+        <h2>Per categoria</h2>
+        <p class="hint">Tocca una categoria per impostarne il budget.</p>
+        <ul class="cat-list" id="trip-cats"></ul>
+        <button type="button" class="secondary" id="trip-cat-add">＋ Nuova categoria</button>
+      </div>
+</div><div class="col">
+      <div class="card">
+        <h2>Spese</h2>
+        <ul class="tx-list" id="trip-list"></ul>
+      </div>
+</div></div>
+      <button class="text-btn danger center" id="trip-delete" type="button">Elimina viaggio</button>
+    </div>
+  </section>
+</main>
+
+<!-- ================= BARRA IN BASSO ================= -->
+<nav class="tabs" id="tabs">
+  <button data-go="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+  <button data-go="history"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Storico</button>
+  <button class="fab" id="fab" aria-label="Aggiungi spesa"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button data-go="trips"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 12.5h18"/></svg>Viaggi</button>
+  <button data-go="budget"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg>Budget</button>
+</nav>
+
+<!-- ================= FOGLIO AGGIUNGI / MODIFICA ================= -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <form id="form" autocomplete="off">
+    <div class="sheet-head">
+      <button type="button" class="text-btn" id="sheet-close">Annulla</button>
+      <h3 id="sheet-title">Nuova spesa</h3>
+      <button type="button" class="text-btn danger" id="sheet-delete" hidden>Elimina</button>
+    </div>
+
+    <div class="where" id="where">
+      <p class="label">Dove la registro?</p>
+      <div class="pills small" id="where-pills"></div>
+    </div>
+
+    <div class="amount">
+      <span>€</span><input id="amount" inputmode="decimal" placeholder="0,00" aria-label="Importo">
+    </div>
+    <input class="desc" id="desc" list="desc-list" placeholder="Cosa hai comprato?" aria-label="Descrizione">
+    <datalist id="desc-list"></datalist>
+
+    <div class="frequent" id="frequent">
+      <p class="label">Frequenti</p>
+      <div class="pills small" id="freq-pills"></div>
+    </div>
+
+    <p class="label">Categoria <span class="hint" id="hint"></span></p>
+    <ul class="cat-pick" id="cat-grid"></ul>
+
+    <p class="label">Quando</p>
+    <div class="seg" id="day-seg">
+      <button type="button" data-day="0" class="on">Oggi</button>
+      <button type="button" data-day="1">Ieri</button>
+      <button type="button" data-day="other">Altra data</button>
+    </div>
+    <input type="date" id="date" class="date" hidden>
+
+    <div id="split-box">
+      <p class="label">Dividi su più mesi</p>
+      <div class="pills" id="split-pills">
+        <button type="button" data-n="1" class="on">No</button><button type="button" data-n="2">2</button>
+        <button type="button" data-n="3">3</button><button type="button" data-n="4">4</button>
+        <button type="button" data-n="6">6</button><button type="button" data-n="custom">Scegli…</button>
+      </div>
+      <div class="split-custom" id="split-custom" hidden>
+        <div class="field"><span>Per quanti mesi</span>
+          <span class="stepper"><button type="button" id="split-minus" aria-label="Un mese in meno">−</button>
+            <input id="split-n" inputmode="numeric" value="2" aria-label="Numero di mesi">
+            <button type="button" id="split-plus" aria-label="Un mese in più">＋</button></span></div>
+        <label class="field"><span>Oppure fino a</span><select id="split-until" aria-label="Ultimo mese"></select></label>
+      </div>
+      <p class="hint" id="split-hint"></p>
+    </div>
+
+    <details class="extra">
+      <summary>Aggiungi una nota</summary>
+      <input id="note" placeholder="Nota (facoltativa)">
+    </details>
+
+    <div class="save-bar"><button type="submit" class="primary big" id="save" disabled>Salva</button></div>
+  </form>
+</div>
+
+<dialog id="newcat" class="small-dialog">
+  <form method="dialog">
+    <h3>Nuova categoria</h3>
+    <p>Creo <b id="nc-name"></b>? <span id="nc-text">La trovi da questo mese in poi, anche in Excel.</span></p>
+    <label class="field"><span id="nc-label">Budget al mese (€)</span> <input id="nc-budget" inputmode="decimal" value="0"></label>
+    <div class="dlg-actions">
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Crea</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm" class="small-dialog">
+  <form method="dialog">
+    <h3 id="confirm-title">Sei sicuro?</h3>
+    <p id="confirm-text"></p>
+    <div class="dlg-actions">
+      <button value="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary danger-btn" id="confirm-ok">Elimina</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="numdlg" class="small-dialog">
+  <form method="dialog">
+    <h3 id="num-title">Budget</h3>
+    <p id="num-text"></p>
+    <label class="field">Importo (€) <input id="num-value" inputmode="decimal"></label>
+    <div class="dlg-actions">
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="subdlg" class="small-dialog">
+  <form method="dialog">
+    <h3 id="sd-title">Abbonamento</h3>
+    <label class="field">Nome <input id="sd-name" autocapitalize="sentences"></label>
+    <label class="field">Importo (€) <input id="sd-amount" inputmode="decimal"></label>
+    <label class="field">Giorno del mese <input id="sd-day" inputmode="numeric" value="1"></label>
+    <div class="dlg-actions three">
+      <button type="button" data-close="delete" class="secondary danger-text" id="sd-delete">Elimina</button>
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="catdlg" class="small-dialog">
+  <form method="dialog">
+    <h3 id="cd-title">Categoria</h3>
+    <label class="field">Nome <input id="cd-name" autocapitalize="sentences"></label>
+    <label class="field">Budget <span class="hint" id="cd-month"></span> <input id="cd-budget" inputmode="decimal"></label>
+    <div id="cd-delete-box" hidden>
+      <p class="hint" id="cd-delete-text"></p>
+      <label class="field">Sposta le spese in <select id="cd-move"></select></label>
+    </div>
+    <div class="dlg-actions three">
+      <button type="button" class="secondary danger-text" id="cd-delete">Elimina</button>
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+<script src="/static/i18n.js?v=33"></script>
+<script src="/static/app.js?v=33"></script>
+</body>
+</html>

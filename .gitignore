@@ -1,0 +1,20 @@
+# ===== dati personali: MAI su GitHub =====
+# file Excel (tranne il modello vuoto) e file temporanei di Excel
+*.xlsx
+!modello/Budget_Tracker_vuoto.xlsx
+~$*
+# copie di prova, backup, dati dell'app (correzioni imparate, quiz, coda, parole chiave personali), log
+test/
+backups/
+data/
+logs/
+# appunti personali del brain e configurazioni con il percorso dell'utente
+brain/privato.md
+launchd/com.budgetapp.server.plist
+.claude/
+
+# ===== roba generata =====
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

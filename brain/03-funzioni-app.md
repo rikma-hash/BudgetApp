@@ -1,0 +1,89 @@
+# 03 · Funzioni dell'app
+
+Barra in basso: **Home · Storico · ＋ · Viaggi · Budget**
+
+## Uso con il Mac spento (offline)
+- Ogni lettura riuscita (`GET /api/…`) viene copiata nel telefono (`localStorage` "api:<percorso>", max 40, il parametro `day=` non conta). Se il Mac non risponde, `api()` restituisce la copia: si vedono Home, Storico, Budget, Risparmi, Viaggi **come l'ultima volta**, con l'avviso "🕘 Stai vedendo i dati del …: si possono solo guardare".
+- Spese nuove (anche dei viaggi, anche a rate o con categoria nuova): coda nel telefono (`queue`), inviate da `flushQueue` quando il Mac risponde (ogni 30 s e al rientro nell'app); poi si ricarica la vista.
+- Categoria suggerita offline: `GET /api/offline-pack` (parole chiave + correzioni imparate + storico descrizione→categoria, ~4 KB) salvato nel telefono ogni 12 ore; `localSuggest()` in app.js lo usa ("· suggerita sul telefono").
+- Modifiche ed eliminazioni: **solo con il Mac acceso** (`openEdit` lo blocca con un messaggio), per non toccare la riga sbagliata.
+- Perché l'app si **apra** a Mac spento serve il service worker, quindi l'indirizzo **https** (vedi 05-problemi-noti).
+- **`sw.js` (v23) = prima la copia**: pagina e file arrivano subito dalla cache (anche a Mac spento), la rete aggiorna la copia in sottofondo; quando c'è un sw nuovo l'app si ricarica da sola (`controllerchange`, non mentre la schermata ＋ è aperta). Motivo: con "rete prima + attesa 2,5 s" in Safari funzionava, ma **aprendo l'icona della Home lo schermo restava vuoto** e il sw risultava assente (diag 2/11). **Attese massime dei dati**: `api()` rinuncia dopo **8 s** per le letture (1,5 s se già offline) e **12 s** per le scritture (4 s se già offline; import e consigli 120 s), poi copia salvata o coda.
+- Il browser di anteprima di Claude non registra i service worker: la parte "si apre a Mac spento" si verifica sull'iPhone.
+- `sw.js` v21: se manca la copia esatta usa qualunque versione dello stesso file (`ignoreSearch`); le cache vecchie si cancellano solo dopo che la nuova è completa.
+- **Versione**: `APP_VERSION` = il `?v=N` con cui è stato caricato app.js; all'avvio `checkVersion()` chiede `/api/version` (letto da index.html sul Mac) e, se diverso, cancella le cache `spese-*` e ricarica (una volta per versione, `sessionStorage`). Impostazioni › Uso con il Mac spento mostra la versione e il pulsante **🔄 Ripristina l'app** (toglie service worker e copie, tiene dati/coda/impostazioni). `/` e `/sw.js` hanno `Cache-Control: no-store`; il sw installa i file con `cache: "reload"`.
+- **Scatola nera**: `index.html` mostra "Apro l'app…" finché `app.js` non parte (dopo 8 s un messaggio) e annota l'avvio e gli errori in `localStorage` "diag-app"; `sw.js` annota cosa serve e da dove (cache "diag"). Al primo avvio con il Mac raggiungibile `sendDiag()` li manda a `POST /api/diag` → **`logs/diag.log`**. Leggere lì per capire cosa è successo sull'iPhone. Riquadro **Impostazioni › Uso con il Mac spento**: ✓/✗ per https, service worker attivo, file in cache, dati salvati, archiviazione persistente (`navigator.storage.persist()` chiesto a ogni avvio).
+
+## Impostazioni (⚙️ nella Home, vista `settings`)
+- Per dispositivo (`localStorage` "prefs", letto da uno script in `<head>` prima di disegnare): **Tema** Automatico/Chiaro/Scuro (`html[data-theme]`), **Colore** Verde/Blu/Viola/Rosa/Arancio/Grafite (`html[data-accent]`, cambia `--accent`/`--accent-soft`; `--good` resta verde), **Testo** Normale/Grande/Molto grande (`zoom` 1,1/1,2 sul body), **Pagina iniziale** Home/Storico/Budget.
+- **Lingua** Italiano / English (`prefs.lang`, cambio = ricarica la pagina). Come funziona (`web/i18n.js`, caricato prima di app.js):
+  - il codice e l'HTML restano **in italiano**; se `LANG = "en"` un `MutationObserver` traduce i testi mentre vengono disegnati con `tr()`: prima `EXACT` (frasi fisse), poi `FRAGMENTS` (pezzi dentro frasi), poi `PATTERNS` (regex con parti variabili; i generici tipo "… al mese" stanno **in fondo**). Emoji/✓/· iniziali vengono tolti e rimessi.
+  - `LOCALE` (en-GB / it-IT) per importi e date (`eur`, `toLocaleDateString`), `DEC` per i decimali nei campi; `parseAmount` capisce sia 12,50 sia 12.50.
+  - Non si traducono i dati: categorie, descrizioni, note, nomi dei viaggi, file Excel. I nomi dei mesi sì (solo a schermo).
+  - **Quando aggiungi un testo all'app, aggiungilo anche in i18n.js** (altrimenti in inglese resta in italiano). Per i casi ambigui (es. "Spesa · viaggio") si usa `LANG` direttamente nel codice.
+  - Consigli di Claude: `POST /api/advice?lang=en` chiede la risposta in inglese.
+
+## Mac / schermo largo (≥ 900 px)
+- Barra a sinistra (la `.tabs` diventa laterale, ＋ diventa "Nuova spesa" in cima). Le schede sono raggruppate in `<div class="cols"><div class="col">…` che sul telefono hanno `display: contents` (nessun effetto) e sul Mac diventano due colonne: Home (riepilogo+categorie | ultime spese), Storico mese (riepilogo+categorie | spese), Piano (scala+quiz, fissa | passi), Risparmi, dettaglio viaggio. Anno e Viaggi: schede in griglia da 2. La schermata ＋ è una finestra al centro (clic fuori = chiudi).
+
+## Home
+- Numero grande: "Ti restano X €" (budget − speso) oppure "Hai speso X €" se il budget non c'è; barra, giorni alla fine del mese; riquadri **Oggi** e **Questa settimana**.
+- Pulsanti **Senza affitto** / **Senza viaggi**: tolgono quelle categorie da speso e budget (memorizzati nel telefono, valgono anche nello Storico).
+- Categorie con barra e "restano/sforato"; ultime 5 spese (tocco = modifica; riga "✈️ Viaggio" = apre il viaggio).
+- **Avvisi** sotto il numero grande (`renderAlerts`): categorie con budget usate ≥ 80% (⚠️ "usato il X% · restano Y") o sforate (🔴); affitto/abbonamenti/viaggi solo se sforati; max 4; tocco = Storico filtrato.
+- **Scorri verso sinistra per eliminare** (`enableSwipe`) su ultime spese, Storico e spese del viaggio: compare "Elimina" rosso → conferma → `deleteTx`. Non per spese in coda e righe "✈️ Viaggio"; solo con il Mac acceso.
+
+## ＋ (schermata intera, non un `<dialog>`)
+- In alto **"Dove la registro?"**: 📅 Spesa del mese oppure ✈️ uno dei viaggi.
+- Importo grande, descrizione (autocompletamento), **Frequenti** (spese ricorrenti con un tocco).
+- **Elenco categorie** (non griglia): "Suggerite" in cima (consigliata / nuova), poi tutte, poi "Nuova categoria…" (campo nell'elenco, niente `prompt()`).
+- Quando: Oggi / Ieri / Altra data. Nota facoltativa.
+- **Dividi su più mesi** (solo spese del mese, non viaggi, non in modifica): No/2/3/4/6/**Scegli…** (riquadro con "Per quanti mesi" − N ＋ e "Oppure fino a" <mese>, sincronizzati, max 24) → `Expense.split`; se l'ultima rata cade dopo Luglio 2027 il foglio del mese viene creato (anche nel Riassunto); il server scrive una rata per mese (stesso giorno, ultimo giorno se il mese è più corto), descrizione `X (1/3)`, nota "Rata 1 di 3 · totale …", l'ultima rata prende i centesimi; un solo salvataggio. Ogni rata poi si modifica/elimina da sola. Pulsante **Salva X €** fisso in basso.
+- Modifica = stessa schermata con "Elimina" (conferma dell'app, niente `confirm()`); in modifica la categoria attuale sta in cima.
+- Offline (Mac irraggiungibile): la spesa resta nel telefono (`localStorage` "queue") e parte dopo. Excel aperto sul Mac (file `~$`): coda sul server (`data/pending.json`).
+
+## Suggerimento della categoria (`suggest.py`)
+1. Storico (tutte le spese, descrizioni normalizzate, rapidfuzz) + correzioni imparate (`learned.json`, peso massimo).
+2. Parole chiave (`keywords.json`: Lidl/Rewe → Spesa, Bolt/monopattino → Trasporti, DM/farmaci → Cura personale, kebab/McDonald → Fast food…). Categorie non esistenti vengono proposte come "nuove".
+3. Claude, solo se i primi due sono incerti (< 0,8): `BUDGET_AI=cli` usa **Claude Code con l'abbonamento dell'utente** (`claude -p --model haiku`), non la chiave API. Se manca, si salta.
+- Precisione senza IA sullo storico: ~65% al primo colpo; gli errori sono quasi tutti spese fatte in viaggio.
+
+## Storico
+- **Mese**: pillole dei mesi (futuri più chiari), riepilogo Speso/Budget/Avanzo, **elenco "Speso e budget per categoria"** (barra, "restano/sforato" per ogni categoria, anche nei mesi passati; tocco = filtra le spese), pulsanti senza affitto/viaggi, filtro per categoria, spese divise per settimana con date ("Settimana 1 · 1–7 nov"). Tocco = modifica (in Settembre/Ottobre la data non si cambia; cambiando mese la spesa si sposta di foglio).
+- **Anno**: totali (solo mesi iniziati), schede mese con surplus/deficit, "Prossimi mesi" a parte. Pulsanti 📥 Importa e 📗 Excel (sul Mac apre il file; sull'iPhone apre l'app Excel).
+
+## Importa estratto conto (Storico › 📥 Importa, vista `import`)
+- L'utente sceglie un file **CSV o PDF** scaricato dall'app della banca/carta (su iPhone da File). Il telefono lo manda in base64 a `POST /api/import/parse` (max 8 MB) → `server/importer.py`:
+  - CSV: separatore e riga intestazione automatici; colonne riconosciute per nome (IT/DE/EN: Data/Buchungstag/Started Date, Descrizione/Causale/Beguenstigter/Description, Importo/Betrag/Amount, Uscite/Entrate/Soll/Haben). Nome = prima colonna descrizione utile, testo completo in `original`.
+  - PDF (serve testo, non scansioni; `pypdf` layout): righe che iniziano con una data e finiscono con un importo; righe successive senza data = continuazione della descrizione; salta saldo/totali; se c'è l'intestazione Uscite|Entrate decide dalla colonna, altrimenti da segno e parole (accredito, bonifico a vostro favore, gutschrift…).
+  - Solo uscite (le entrate sono contate e scartate; se tutto è positivo, es. carta, sono tutte uscite tranne storni/rimborsi). `clean_description` toglie POS/CARTA/date/codici ("PAGAMENTO POS … PRESSO LIDL 1234" → "Lidl").
+  - Per ogni riga: categoria da `suggester` (senza IA) + una sola domanda a Claude per quelle incerte (`_ai_categories`, solo se `BUDGET_AI` attivo); **già presente** se stessa cifra e data ±2 giorni in un mese o in un viaggio (deselezionata); **bloccata** se mese vecchio (Set/Ott) o prima dell'inizio del budget.
+- Revisione: righe per mese con casella, descrizione modificabile, menu categoria (le nuove con "(nuova)"), "scegli la categoria ↓" se manca. Pulsante "Aggiungi N spese (X €)" → `POST /api/import/save` (un solo salvataggio, categorie nuove create con budget 0, nota "Da estratto conto · testo originale", l'app impara le categorie).
+- Limite noto: non sa se una spesa era in viaggio; l'avviso dice di aggiungerle dal viaggio.
+
+## Viaggi
+- Elenco "cartelle" (nome, date, n. spese, speso/budget). **＋ Nuovo** crea il foglio `✈ Nome` dal template.
+- Dentro il viaggio (schermata unica): speso vs budget, categorie (tocco = budget), **＋ Nuova categoria** (`POST /api/trips/category`; anche "Nuova categoria…" nella schermata ＋ in modalità viaggio → `new_category_budget`; in modifica una categoria nuova viene creata), riga "Senza categoria" calcolata per spese con categoria non in tabella (`virtual`), spese (tocco = modifica/elimina), **＋ Aggiungi spesa al viaggio**, Elimina viaggio.
+- Ogni modifica ricalcola le righe "✈️ Viaggio" nei mesi (`trips.sync_months`) e il riepilogo `Viaggi`.
+
+## Budget
+- **Piano**: pillole del mese (da quello in corso fino a Luglio). In cima la **scala**: Entrate − Da mettere da parte ± Mesi scorsi = **Puoi spendere** (grande), con il riquadro "Ti restano X € da dividere / Tutto assegnato / Le categorie superano di X €".
+  - **Quiz** "Rendi la proposta più tua" (riquadro apribile, 5 domande: cucini, esci, acquisti grandi, viaggi, obiettivo). Le risposte stanno in `data/profile.json` (`GET/PUT /api/profile`) e moltiplicano la media storica delle categorie che contengono la parola chiave (es. "viaggi" ×0,3 se "No"); il totale resta "Puoi spendere", quindi spostano soldi tra le variabili. L'obiettivo imposta la % di risparmio (15/10/5).
+  - ① entrate + Surplus/Deficit (Aggiungi/Sottrai/Ignora) → ② da parte: 0–20% **oppure importo in €**, riquadro "Metti da parte X € al mese · in un anno Y €" → ③ categorie: fisse prima (Affitto = max(ultimo, attuale, media); Abbonamenti ≥ somma programmati), variabili in proporzione alla media × quiz, arrotondate a 5 €; la differenza dell'arrotondamento va nella variabile più grande (così "Tutto assegnato" è esatto). Le cifre cambiate a mano restano ferme e le altre si ridividono il resto (all'uscita dal campo).
+  - ① entrate **a lista** (file creati dal modello vuoto): voci libere con "＋ Aggiungi entrata" (nome + importo, max 10), **scorri a sinistra per eliminare** (`enableSwipe` con terzo argomento `onDelete`); si salvano con "Usa questo budget" (`income.items`). Il file dell'utente mostra i campi fissi qui sotto.
+  - Mese proposto: in un file senza mesi la prima pillola è il **mese in corso** (`/api/months` → `this`), non il prossimo.
+  - ① entrate (file dell'utente): riga **💶 Altro** sempre visibile (A7/B7 "Altre entrate"), che entra in Entrate e nel risparmio. ③ **＋ Nuova categoria** aggiunge una riga al piano: la categoria si crea al salvataggio (`PUT /api/budgets` crea quelle mancanti con `add_category`).
+  - Casella **"Usa lo stesso budget anche per i mesi dopo"** → `apply_following`: budget ed entrate (non il riporto) copiati in tutti i mesi nuovi successivi.
+  - **Usa questo budget** scrive budget, entrate e riporto. Il risparmio è solo un obiettivo (non viene scritto nel file): ciò che non assegni finisce nel risparmio.
+- **💳 Abbonamenti** (in Budget › Categorie): elenco H30:J34 del mese (max 5; nome, importo, giorno; la J è la casella "inserito"), modifica/elimina/nuovo (`PUT /api/subscriptions` → `X.set_subscriptions`: mese scelto + successivi + `_Modello`, le caselle già spuntate restano). **Un interruttore per abbonamento** (`profile.json` `auto_subs` = lista dei nomi da inserire; vuota di base; `true` = tutti): accendendone uno, se nel mese in corso risulta "inserito" ma la spesa non c'è (es. eliminata) la casella torna libera e viene inserito subito. Il worker ogni 30 min (e subito dopo il salvataggio) chiama `X.apply_subscriptions` → spesa "Nome" nel giorno indicato (giorno nel nome tra parentesi, es. "Abbonamento (24)"; altrimenti il 1°), categoria Abbonamenti, nota "Abbonamento inserito in automatico", casella spuntata; se nel mese c'è già una spesa con quel nome e importo spunta solo la casella. Registro in `data/subs_log.json`.
+- **Categorie**: rinomina (tutti i mesi nuovi + `_Modello`, anche le spese), budget del mese scelto, elimina (spese spostate in un'altra categoria; "Viaggi" non eliminabile), nuova categoria (max 15 slot).
+- **Risparmi** (schede con freccia ›, `<details class="fold">`): risparmiato finora (solo mesi conclusi) →
+  **📅 Mese in corso**: "puoi spendere X € al giorno" (categorie con budget, senza affitto/abbonamenti/viaggi = `LUMPY`), avvisi per categorie ≥ 80% o, dal giorno 7, che al ritmo attuale sforano; dettaglio al giorno per categoria →
+  **🎯 Consigli sul budget** (`budget_tips`): categorie sforate in ≥ 2 mesi conclusi ("alza" a media speso) o sempre sotto il 70% ("abbassa" a media × 1,1); barre speso con tacca del budget; pulsante "Usa X € a <mese in corso>" (solo quella categoria, `PUT /api/budgets`), oppure "✓ hai già messo…" →
+  **💡 Dove puoi risparmiare**: temi trasversali con "puoi risparmiare X €/mese" (30%); aperti: quante spese al mese e importo medio, obiettivo annuo, mese per mese, voci che pesano di più (nome · volte · totale); piccole spese < 5 €; abbonamenti → **Mese per mese**: ogni mese ha +/− e una barra (verde = speso fino alle entrate, rossa = la parte che sfora, tacca = entrate; mese in corso sbiadito); aprendo un mese carica `/api/month` e mostra categoria per categoria speso/budget/differenza + "Vedi le spese →" → **Su cosa spendi di più** (apribili con le voci). Pulsante Claude se disponibile.
+  Le righe "✈️ Viaggio" dei mesi sono escluse dall'analisi (sono totali, non spese).
+
+## API (server/main.py)
+`GET /api/state` · `POST /api/suggest` · `POST /api/expenses` · `POST /api/expenses/edit` · `POST /api/expenses/delete` · `GET /api/months` · `GET /api/month?sheet=` · `GET /api/year` · `PUT /api/budget` · `PUT /api/budgets` (anche `apply_following`) · `GET/PUT /api/profile` · `GET /api/budget/proposal?sheet|date&save_rate&use_carry` · `GET /api/insights` · `POST /api/advice` · `GET /api/quick` · `GET /api/trips` · `GET /api/trip?name=` · `POST /api/trips` · `POST /api/trips/delete` · `POST /api/trips/expense` · `POST /api/trips/edit` · `POST /api/trips/delete-expense` · `POST /api/trips/category` · `PUT /api/trips/budget` · `GET /api/categories` · `POST /api/categories/rename|delete|add` · `POST /api/import/parse` · `POST /api/import/save` · `GET /api/excel` · `POST /api/excel/open`
+
+Tutte le scritture passano da `write()` in main.py: controlla il lock, salva con backup e **ricarica sempre la cache** (anche se fallisce). Le modifiche controllano `expect` (descrizione+importo) per non toccare la riga sbagliata se il file è cambiato.
