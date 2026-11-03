@@ -23,6 +23,7 @@ Mac (browser)  ─────────────────────�
 | Backup automatici | `backups/` (ultime 50 copie, una prima di ogni scrittura) · `backups/giornalieri/` (60 giorni) · `backups/mensili/` (tutti) · `backups/originale/` (copie storiche da non cancellare) |
 | Script una tantum | `scripts/migrate_template.py`, `scripts/add_months.py`, `scripts/setup_trips.py` |
 | Avvio automatico | `launchd/com.budgetapp.server.plist` (locale, non su GitHub; modello: `launchd/com.budgetapp.server.plist.example`), copiato in `~/Library/LaunchAgents/` |
+| Aggiornamenti automatici (amici) | `avvia.py` (avviatore) + `server/updater.py` (ramo GitHub `stabile`), stato in `data/update.json`; spenti sul Mac dell'utente (vedi 06) |
 | Log | `logs/server.log` |
 | Copie di prova | `test/` (mai il file vero) |
 

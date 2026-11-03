@@ -10,8 +10,8 @@
     <string>run</string>
     <string>--directory</string>
     <string>__HOME__/Documents/BudgetApp</string>
-    <string>uvicorn</string>
-    <string>server.main:app</string>
+    <string>python</string>
+    <string>avvia.py</string>
     <string>--host</string>
     <string>0.0.0.0</string>
     <string>--port</string>

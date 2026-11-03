@@ -3,7 +3,7 @@
 #      powershell -ExecutionPolicy Bypass -File installa-windows.ps1
 # Cosa fa: installa uv (se manca), prepara il tuo file Excel dal modello vuoto (mai sovrascrive un file esistente),
 # avvia l'app in automatico quando entri in Windows e, se c'è Tailscale, la rende raggiungibile dall'iPhone.
-# Si può rilanciare quando vuoi (per esempio dopo aver scaricato una versione nuova).
+# Si può rilanciare quando vuoi. Dopo l'installazione l'app si aggiorna da sola (avvia.py + server/updater.py).
 $ErrorActionPreference = "Stop"
 
 $AppDir = $PSScriptRoot
@@ -65,7 +65,7 @@ set "BUDGET_XLSX=$Xlsx"
 set "BUDGET_AI=cli"
 set "PYTHONUNBUFFERED=1"
 cd /d "$AppDir"
-"$Uv" run uvicorn server.main:app --host 127.0.0.1 --port $Port >> "$AppDir\logs\server.log" 2>&1
+"$Uv" run python avvia.py --host 127.0.0.1 --port $Port >> "$AppDir\logs\server.log" 2>&1
 "@
 $Utf8 = New-Object System.Text.UTF8Encoding $false   # senza BOM: il .cmd con BOM non parte bene
 [System.IO.File]::WriteAllText($Cmd, $CmdText, $Utf8)

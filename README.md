@@ -1,6 +1,6 @@
 # BudgetApp
 
-👉 **Per installarla passo passo: [GUIDA.md](GUIDA.md)** (Mac: `bash installa-mac.sh` · Windows: `installa-windows.ps1`).
+👉 **Per installarla passo passo: [GUIDA.md](GUIDA.md)** (dopo si aggiorna da sola dal ramo `stabile`) (Mac: `bash installa-mac.sh` · Windows: `installa-windows.ps1`).
 
 Mini-app delle spese (iPhone + Mac) che scrive in un file Excel del budget su iCloud: registrazione rapida con
 categoria suggerita, piano del budget, risparmi e consigli, viaggi, rate su più mesi, import dell'estratto conto

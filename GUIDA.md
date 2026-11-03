@@ -26,10 +26,10 @@ Tempo: circa 15 minuti.
 ---
 
 ## Passo 1 · Scarica l'app
-1. Apri la pagina GitHub dell'app che ti hanno condiviso.
-2. Clicca il pulsante verde **Code** e poi **Download ZIP**.
-3. Apri lo ZIP scaricato: si crea una cartella `BudgetApp` (a volte si chiama `BudgetApp-main`).
-4. Sposta la cartella in **Documenti**. Da qui in poi non spostarla più: l'avvio automatico la cerca lì.
+1. Scarica la versione stabile: **https://github.com/rikma-hash/BudgetApp/archive/refs/heads/stabile.zip**
+   (in alternativa: pagina GitHub dell'app › pulsante verde **Code** › **Download ZIP**).
+2. Apri lo ZIP scaricato: si crea una cartella `BudgetApp-stabile` (o `BudgetApp-main`); puoi rinominarla `BudgetApp`.
+3. Sposta la cartella in **Documenti**. Da qui in poi non spostarla più: l'avvio automatico la cerca lì.
 
 ## Passo 2 · Tailscale (computer e iPhone)
 1. Vai su **tailscale.com**, crea un account gratuito (anche con Google o Apple).
@@ -85,6 +85,13 @@ Sul computer, nel Terminale/PowerShell, installa Claude Code (istruzioni su **cl
 fai il login e chiudi con `/exit`. Poi rilancia l'installatore. Senza Claude l'app funziona lo stesso.
 
 ## Aggiornare l'app
+**Si aggiorna da sola.** Il computer controlla ogni 6 ore se c'è una versione nuova, la installa e si riavvia in pochi secondi.
+Il tuo file Excel, la cartella `data` e le copie di sicurezza non vengono toccati. Se una versione nuova non parte, l'app
+rimette da sola quella di prima. Nell'app: ⚙️ Impostazioni › **Aggiornamenti** (vedi la versione, "Controlla ora", oppure spegnili).
+Il telefono si aggiorna da solo la prima volta che lo apri con il computer acceso.
+
+**Una volta sola**, se hai installato l'app prima che esistessero gli aggiornamenti automatici (in Impostazioni › Aggiornamenti
+c'è scritto "rilancia una volta l'installatore"), oppure se li hai spenti e vuoi aggiornare a mano:
 1. Scarica di nuovo lo ZIP (Passo 1).
 2. Copia i file nuovi **sopra** la tua cartella BudgetApp, ma **non toccare** le cartelle `data` (dentro ci sono le correzioni
    che l'app ha imparato e le spese in coda) e `backups` (le copie di sicurezza). Il tuo file Excel non è nella cartella,

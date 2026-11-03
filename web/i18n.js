@@ -20,6 +20,16 @@ const EXACT = {
   "Risparmi": "Savings", "Home": "Home", "Viaggi": "Trips", "‹ Storico": "‹ History", "‹ Home": "‹ Home", "‹ Viaggi": "‹ Trips",
   "Caricamento…": "Loading…", "Carico…": "Loading…",
   // piano: colonne, totali, allarme · viaggi: copia budget · rate
+  "Aggiornamenti": "Updates", "Automatici": "Automatic", "Spenti": "Off", "Controlla ora": "Check now",
+  "Serve il computer acceso per vedere gli aggiornamenti.": "The computer must be on to see updates.",
+  "Questa copia è quella da cui pubblichi l'app su GitHub: si aggiorna con le tue modifiche, non in automatico. Gli aggiornamenti automatici valgono per chi l'ha installata dallo ZIP.":
+    "This is the copy you publish the app from on GitHub: it updates with your changes, not automatically. Automatic updates are for people who installed it from the ZIP.",
+  "Per attivarli rilancia una volta l'installatore (vedi la guida, \"Aggiornare l'app\"). Dopo non serve più.":
+    "To turn them on, run the installer once more (see the guide, \"Updating the app\"). After that it's not needed.",
+  "Il computer controlla ogni 6 ore se c'è una versione nuova e si aggiorna da solo (file Excel e dati restano).":
+    "The computer checks every 6 hours for a new version and updates itself (Excel file and data stay).",
+  "Le versioni nuove le installi tu riscaricando lo ZIP.": "You install new versions yourself by downloading the ZIP again.",
+  "Versione nuova installata: l'app si riavvia…": "New version installed: the app is restarting…", "Hai già l'ultima versione": "You already have the latest version",
   "Proposto": "Proposed", "Messo": "Set", "Dovresti avere": "You should have", "Proposto (somma)": "Proposed (total)",
   "Messo ora (somma)": "Set now (total)", "Aggiusta": "Adjust", "Ignora": "Ignore", "Salva lo stesso": "Save anyway",
   "Le categorie sono più di quello che puoi spendere. Salvo lo stesso? (Annulla e tocca Aggiusta per farle rientrare.)":
@@ -189,6 +199,7 @@ const EXACT = {
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
   [/^Superi di (.+)$/, "Over by $1"],
+  [/^Versione (\w+) · ultimo controllo (.+)$/, "Version $1 · last check $2"], [/^ultimo controllo (.+)$/, "last check $1"], [/^Versione ([0-9a-f]{7})$/, "Version $1"],
   [/^⚠️ Le categorie superano di (.+) quello che puoi spendere\.$/, "⚠️ The categories exceed what you can spend by $1."],
   [/^Le categorie superano di (.+) quello che puoi spendere \(hai scelto di ignorarlo\)\.$/, "The categories exceed what you can spend by $1 (you chose to ignore it)."],
   [/^Ho abbassato le variabili, ma le spese fisse superano ancora di (.+)$/, "I lowered the variable ones, but fixed costs still exceed by $1"],

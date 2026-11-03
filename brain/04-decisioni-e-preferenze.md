@@ -38,7 +38,7 @@ Fatto: blocco 1 Budget (2/11), blocco 2 Consigli con frecce (2/11), blocco 3 cat
 
 ## Modifiche: per chi? (3/11)
 - **Prima di ogni modifica chiedere**: solo l'app dell'utente, solo il modello GitHub (amici) o entrambi. Il codice è unico: le differenze si legano al file Excel (es. `income_list_mode`: entrate fisse per l'utente, a lista nel modello vuoto) o a `data/` (mai su GitHub).
-- Dopo ogni modifica: commit + push, così il modello su GitHub è sempre aggiornato (gli amici lo riscaricano, vedi GUIDA › Aggiornare l'app).
+- Dopo ogni modifica: commit + push su `main`. **Gli amici però si aggiornano da soli solo dal ramo `stabile`** (dal 4/11): dopo il push chiedere all'utente **"Pubblico anche per gli amici?"** e solo con il suo sì fare `git push origin main:stabile` (entro 6 ore arriva a tutti). Mai pubblicare su `stabile` qualcosa non provato.
 
 ## Licenza (3/11)
 - Gli altri possono **usare** l'app (gratis, uso personale) ma **non modificarla** né ridistribuirla modificata: `LICENSE` "uso personale", non open source. Le modifiche al codice le fa solo l'utente (è l'unico che può scrivere nel repository GitHub).

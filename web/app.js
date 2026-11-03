@@ -1747,8 +1747,42 @@ async function renderOfflineCheck() {
   window.__diag?.(`stato offline: ${JSON.stringify(s)}`);
 }
 
+// Aggiornamenti automatici (per chi ha installato dallo ZIP): stato dal computer, interruttore e "Controlla ora"
+async function renderUpdates() {
+  let u;
+  try { u = await api("/api/update"); } catch { $("upd-box").innerHTML = `<p class="hint">Serve il computer acceso per vedere gli aggiornamenti.</p>`; return; }
+  const info = [u.installed && `Versione ${u.installed}`, u.last_check && `ultimo controllo ${u.last_check.slice(8, 10)}/${u.last_check.slice(5, 7)} ${u.last_check.slice(11)}`].filter(Boolean).join(" · ");
+  if (u.blocked === "dev") {
+    $("upd-box").innerHTML = `<p class="hint">Questa copia è quella da cui pubblichi l'app su GitHub: si aggiorna con le tue modifiche, non in automatico. Gli aggiornamenti automatici valgono per chi l'ha installata dallo ZIP.</p>`;
+    return;
+  }
+  if (u.blocked === "old") {
+    $("upd-box").innerHTML = `<p class="warn">Per attivarli rilancia una volta l'installatore (vedi la guida, "Aggiornare l'app"). Dopo non serve più.</p>`;
+    return;
+  }
+  const on = !u.blocked;
+  $("upd-box").innerHTML = `<div class="seg" id="upd-seg"><button type="button" data-v="1" class="${on ? "on" : ""}">Automatici</button><button type="button" data-v="0" class="${on ? "" : "on"}">Spenti</button></div>
+    <p class="hint">${on ? "Il computer controlla ogni 6 ore se c'è una versione nuova e si aggiorna da solo (file Excel e dati restano)." : "Le versioni nuove le installi tu riscaricando lo ZIP."}</p>
+    ${u.result ? `<p class="hint">${esc(u.result)}</p>` : ""}${info ? `<p class="hint">${esc(info)}</p>` : ""}
+    ${on ? `<button type="button" class="secondary" id="upd-now">Controlla ora</button>` : ""}`;
+  $("upd-seg").onclick = async (e) => {
+    const b = e.target.closest("button[data-v]"); if (!b) return;
+    try { await api("/api/profile", { method: "PUT", body: { auto_update: b.dataset.v === "1" } }); } catch (err) { return toast(failMsg(err)); }
+    renderUpdates();
+  };
+  if ($("upd-now")) $("upd-now").onclick = async () => {
+    $("upd-now").disabled = true; $("upd-now").textContent = "Controllo…";
+    try {
+      const r = await api("/api/update/check", { method: "POST" });
+      if (r.updated) { toast("Versione nuova installata: l'app si riavvia…"); setTimeout(() => location.reload(), 10000); }
+      else { toast("Hai già l'ultima versione"); renderUpdates(); }
+    } catch (err) { toast(failMsg(err)); renderUpdates(); }
+  };
+}
+
 function renderSettings() {
   renderOfflineCheck();
+  renderUpdates();
   for (const [id, key] of [["set-theme", "theme"], ["set-size", "size"], ["set-start", "start"], ["set-lang", "lang"]]) {
     document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle("on", b.dataset.v === prefs[key]));
   }

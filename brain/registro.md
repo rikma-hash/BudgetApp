@@ -117,3 +117,7 @@
 - Piano: colonne Proposto | Messo, totali Dovresti avere / Proposto / Messo ora; allarme sforamento con Aggiusta / Ignora e conferma al Salva.
 - Viaggi: copia di categorie e budget da un altro viaggio, alla creazione e con un pulsante nel viaggio.
 - Provato su copia del file vero a 390 px (tutto quanto sopra, nomi lunghi che vanno a capo). Web v38.
+
+## 2026-11-04 · Aggiornamenti automatici per gli amici (app dell'utente + GitHub)
+- `avvia.py` + `server/updater.py` + Impostazioni › Aggiornamenti; installatori e GUIDA aggiornati (ZIP dal ramo `stabile`). Il Mac dell'utente è escluso (cartella git). Dettagli e prove in 06-manutenzione. Web v39.
+- Chi aveva già installato deve rilanciare l'installatore una volta.

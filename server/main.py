@@ -27,6 +27,7 @@ from . import advisor
 from . import importer
 from . import excel as X
 from . import trips as T
+from .updater import Updater, RESTART_CODE
 from .suggest import Suggester, ask_text, claude_cli, AI_MODE, context as user_context
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +38,7 @@ PENDING = DATA / "pending.json"
 DONE = DATA / "done_ids.json"
 
 lock = threading.RLock()
+updater = Updater(ROOT, DATA)
 suggester = Suggester(DATA / "learned.json")
 _cache: dict = {"mtime": None, "wb": None}
 
@@ -210,8 +212,19 @@ def _auto_subscriptions() -> list[dict]:
     return added
 
 
+def _update_and_restart(force: bool = False) -> dict:
+    """Controlla GitHub; se ha installato una versione nuova, spegne il server (avvia.py lo riaccende)."""
+    with lock:  # niente scritture sul file Excel a metà aggiornamento
+        r = updater.check(_read_json(PROFILE, {}), force)
+    if r.get("updated"):
+        print("aggiornamento installato:", r["latest"], "· riavvio")
+        threading.Timer(1.5, lambda: os._exit(RESTART_CODE)).start()  # il tempo di rispondere all'app
+    return r
+
+
 def _worker():
     last_subs = 0.0
+    next_update = time.time() + 120  # primo controllo 2 minuti dopo l'avvio, poi ogni 6 ore
     while True:
         try:
             for p in X.snapshot(XLSX, BACKUPS, dt.date.today()):
@@ -228,6 +241,13 @@ def _worker():
                 _auto_subscriptions()
             except Exception as err:
                 print("abbonamenti:", err)
+        if time.time() > next_update:
+            next_update = time.time() + 6 * 3600
+            try:
+                _update_and_restart()
+            except Exception as err:
+                print("aggiornamento:", err)
+                updater._save(result=f"controllo non riuscito ({dt.datetime.now():%d/%m %H:%M}): {str(err)[:120]}")
         time.sleep(20)
 
 
@@ -951,6 +971,19 @@ def index():
 @app.get("/sw.js")
 def sw():
     return FileResponse(WEB / "sw.js", media_type="application/javascript", headers=NO_STORE)
+
+
+@app.get("/api/update")
+def update_status():
+    return updater.status(_read_json(PROFILE, {}))
+
+
+@app.post("/api/update/check")
+def update_check():
+    try:
+        return _update_and_restart(force=True)
+    except Exception as err:
+        raise HTTPException(502, f"Non riesco a controllare gli aggiornamenti: {str(err)[:120]}")
 
 
 @app.get("/api/version")

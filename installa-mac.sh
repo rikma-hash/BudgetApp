@@ -3,7 +3,7 @@
 # Uso: apri il Terminale nella cartella di BudgetApp e scrivi:   bash installa-mac.sh
 # Cosa fa: installa uv (se manca), prepara il tuo file Excel dal modello vuoto (mai sovrascrive un file esistente),
 # avvia l'app in automatico all'accensione del Mac e, se c'è Tailscale, la rende raggiungibile dall'iPhone.
-# Si può rilanciare quando vuoi (per esempio dopo aver scaricato una versione nuova).
+# Si può rilanciare quando vuoi. Dopo l'installazione l'app si aggiorna da sola (avvia.py + server/updater.py).
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -82,7 +82,7 @@ cat > "$PLIST" <<PL
   <key>ProgramArguments</key>
   <array>
     <string>$(xml "$UV")</string><string>run</string><string>--directory</string><string>$(xml "$APP_DIR")</string>
-    <string>uvicorn</string><string>server.main:app</string><string>--host</string><string>0.0.0.0</string>
+    <string>python</string><string>avvia.py</string><string>--host</string><string>0.0.0.0</string>
     <string>--port</string><string>$PORT</string>
   </array>
   <key>EnvironmentVariables</key>
