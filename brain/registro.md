@@ -108,3 +108,6 @@
 
 ## 2026-11-03 · Mac spento: Storico e Budget sempre disponibili (app dell'utente + GitHub)
 - `warmOffline()`: con il Mac raggiungibile l'app salva in sottofondo tutte le pagine principali per l'uso a Mac spento (dettagli in 05-problemi-noti). Web v35.
+
+## 2026-11-03 · Piano: risparmio e deficit non tornano più al 10% (app dell'utente + GitHub)
+- La % di risparmio non era salvata da nessuna parte e il deficit solo con Salva: ora le scelte del piano si ricordano per ogni mese in `profile.json` (vedi 03). Web v36. Provato su copia a 390 px: Nov 20% + deficit ignorato, Dic 123 € + deficit sottratto → dopo la riapertura uguali, Gennaio (mai toccato) prende il 20%, Salva le lascia com'erano.

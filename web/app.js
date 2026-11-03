@@ -1078,7 +1078,7 @@ $("quiz-list").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-q]"); if (!b) return;
     profile.quiz = { ...profile.quiz, [b.dataset.q]: +b.dataset.a };
     const q = QUIZ.find((x) => x.id === b.dataset.q);
-    if (q.opts[+b.dataset.a][2] != null) setSave(q.opts[+b.dataset.a][2], null);
+    if (q.opts[+b.dataset.a][2] != null) { setSave(q.opts[+b.dataset.a][2], null); rememberPlan(); }
   }
   api("/api/profile", { method: "PUT", body: profile }).catch(() => {});
   renderQuiz();
@@ -1119,23 +1119,36 @@ function setSave(rate, fixed) {
 }
 const saveEuro = () => saveFixed != null ? saveFixed : Math.round(typedBase() * saveRate / 100);
 
+// Scelte del piano per ogni mese (quanto mettere da parte, se contare il surplus/deficit e quanto): nel profilo sul Mac,
+// salvate appena le cambi, così rientrando nell'app (o da un altro dispositivo) restano. Il file cambia solo con Salva.
+function rememberPlan() {
+  if (!budgetTarget) return;
+  profile.plan = { ...profile.plan, [budgetTarget.label]: { rate: saveRate, fixed: saveFixed, carry: useCarry, riporto: typedCarry() } };
+  profile.plan_rate = saveRate;  // per i mesi mai toccati
+  clearTimeout(rememberPlan.t);
+  rememberPlan.t = setTimeout(() => api("/api/profile", { method: "PUT", body: { plan: profile.plan, plan_rate: profile.plan_rate } }).catch(() => {}), 600);
+}
+
 $("save-pills").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-rate]"); if (!b) return;
   loadBudget.saveSet = true;
   setSave(+b.dataset.rate, null);
   renderProposal();
+  rememberPlan();
 });
 $("save-amount").addEventListener("input", () => {
   loadBudget.saveSet = true;
   const v = parseAmount($("save-amount").value);
   setSave(saveRate, Number.isFinite(v) ? Math.max(0, v) : null);
   renderProposal(true);
+  rememberPlan();
 });
 
 $("carry-seg").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-use]"); if (!b) return;
   setCarry(b.dataset.use === "1");
   renderProposal();
+  rememberPlan();
 });
 
 function setCarry(on) {
@@ -1163,6 +1176,13 @@ async function fetchProposal() {
   const carry = p.carry_included ? p.income.riporto : p.carry;
   $("inc-riporto").value = carry ? numIn(carry) : "";
   setCarry(!!p.carry_included);
+  // scelte ricordate per questo mese; per un mese mai toccato vale l'ultima percentuale scelta
+  const saved = profile.plan?.[budgetTarget.label];
+  if (saved) {
+    setSave(saved.rate ?? saveRate, saved.fixed ?? null);
+    setCarry(!!saved.carry);
+    if (saved.carry && saved.riporto) $("inc-riporto").value = numIn(saved.riporto);
+  } else if (profile.plan_rate != null) setSave(profile.plan_rate, null);
   const month = budgetTarget.label;
   $("step1-title").textContent = `Quanto ti entra a ${month}?`;
   $("apply-following").checked = false;
@@ -1311,6 +1331,7 @@ $("prop-list").addEventListener("input", (e) => {
 // finito di scrivere: le categorie non toccate si ridividono quello che resta
 $("prop-list").addEventListener("change", () => renderProposal());
 ["inc-borsa", "inc-personale", "inc-famiglia", "inc-altro", "inc-riporto"].forEach((id) => $(id).addEventListener("input", () => renderProposal()));
+$("inc-riporto").addEventListener("input", rememberPlan);
 
 function addPlanCategory(name, value) {
   name = name.trim();
