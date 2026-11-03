@@ -478,6 +478,42 @@ def set_budgets(body: BudgetsIn):
     return {"status": "ok", **r}
 
 
+class BudgetCopyIn(BaseModel):
+    sheet: str                      # mese da cui copiare
+    targets: list[str] = Field(min_length=1)
+    category: str | None = None     # None = tutte le categorie del mese
+
+
+@app.post("/api/budgets/copy")
+def copy_budgets(body: BudgetCopyIn):
+    """Copia il budget delle categorie (tutte o una) di un mese in altri mesi. Entrate e riporto non cambiano."""
+    def change(wb):
+        if body.sheet not in wb.sheetnames:
+            raise ValueError("Mese non trovato")
+        src = dict(X.categories(wb[body.sheet]))
+        if body.category:
+            name = X.canonical(body.category, list(src))
+            if name is None:
+                raise ValueError(f"Categoria '{body.category}' non trovata in {body.sheet}")
+            src = {name: src[name]}
+        done = []
+        for t in body.targets:
+            if t == body.sheet or t not in wb.sheetnames or not X.is_new_layout(wb[t]):
+                continue
+            ws = wb[t]
+            for cat, value in src.items():
+                name = X.canonical(cat, [c for c, _ in X.categories(ws)])
+                if name is None:  # categoria che quel mese non ha: la aggiungo (da lì in poi, a budget 0)
+                    X.add_category(wb, cat, 0.0, ws)
+                    name = cat
+                X.set_budget(ws, name, float(value or 0))
+            done.append(t)
+        if not done:
+            raise ValueError("Nessun mese da aggiornare")
+        return {"months": done, "categories": len(src)}
+    return {"status": "ok", **write(change)}
+
+
 # ---------- abbonamenti programmati ----------
 
 @app.get("/api/subscriptions")

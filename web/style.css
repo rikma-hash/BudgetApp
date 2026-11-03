@@ -566,3 +566,8 @@ body.sheet-open .tabs { display: none; }
 #split-hint .split-months b { color: var(--ink); }
 #prop-list .what { min-width: 0; }
 #prop-list .what b { overflow-wrap: anywhere; }
+.month-checks { list-style: none; margin: 4px 0 8px; padding: 0; max-height: 46vh; overflow-y: auto; }
+.month-checks li + li { border-top: 1px solid var(--line); }
+.month-checks .check { padding: 10px 0; }
+.month-checks input { width: 20px; height: 20px; accent-color: var(--accent); }
+#catdlg #cd-copy { display: block; margin: 6px 0 10px; }

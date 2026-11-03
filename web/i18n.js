@@ -20,6 +20,8 @@ const EXACT = {
   "Risparmi": "Savings", "Home": "Home", "Viaggi": "Trips", "‹ Storico": "‹ History", "‹ Home": "‹ Home", "‹ Viaggi": "‹ Trips",
   "Caricamento…": "Loading…", "Carico…": "Loading…",
   // piano: colonne, totali, allarme · viaggi: copia budget · rate
+  "📋 Copia il budget del mese in altri mesi": "📋 Copy this month's budget to other months", "📋 Copia questo budget in altri mesi": "📋 Copy this budget to other months",
+  "Seleziona tutti": "Select all", "Togli tutti": "Clear all", "Questo mese non esiste ancora: salva prima il suo budget nel Piano.": "This month doesn't exist yet: save its budget in the Plan first.",
   "Aggiornamenti": "Updates", "Automatici": "Automatic", "Spenti": "Off", "Controlla ora": "Check now",
   "Serve il computer acceso per vedere gli aggiornamenti.": "The computer must be on to see updates.",
   "Questa copia è quella da cui pubblichi l'app su GitHub: si aggiorna con le tue modifiche, non in automatico. Gli aggiornamenti automatici valgono per chi l'ha installata dallo ZIP.":
@@ -199,6 +201,11 @@ const EXACT = {
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
   [/^Superi di (.+)$/, "Over by $1"],
+  [/^Copia il budget di (.+)$/, "Copy the budget of $1"], [/^Copia in (\d+) (mese|mesi)$/, (m, n) => `Copy to ${n} ${n === "1" ? "month" : "months"}`],
+  [/^Non ci sono mesi dopo (.+)$/, "There are no months after $1"],
+  [/^Il budget di tutte le categorie di (.+) va nei mesi che scegli\. Entrate e surplus\/deficit restano come sono\.$/, "The budget of every category in $1 goes to the months you choose. Income and surplus/deficit stay as they are."],
+  [/^Il budget di (.+) a (.+) \((.+)\) va nei mesi che scegli\.$/, "The budget of $1 in $2 ($3) goes to the months you choose."],
+  [/^✓ Budget (di .+ )?copiato in (\d+) (mese|mesi)$/, (m, c, n) => `✓ Budget ${c ? c.replace(/^di /, "of ") : ""}copied to ${n} ${n === "1" ? "month" : "months"}`],
   [/^Versione (\w+) · ultimo controllo (.+)$/, "Version $1 · last check $2"], [/^ultimo controllo (.+)$/, "last check $1"], [/^Versione ([0-9a-f]{7})$/, "Version $1"],
   [/^⚠️ Le categorie superano di (.+) quello che puoi spendere\.$/, "⚠️ The categories exceed what you can spend by $1."],
   [/^Le categorie superano di (.+) quello che puoi spendere \(hai scelto di ignorarlo\)\.$/, "The categories exceed what you can spend by $1 (you chose to ignore it)."],

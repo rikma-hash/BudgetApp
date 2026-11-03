@@ -121,3 +121,6 @@
 ## 2026-11-04 · Aggiornamenti automatici per gli amici (app dell'utente + GitHub)
 - `avvia.py` + `server/updater.py` + Impostazioni › Aggiornamenti; installatori e GUIDA aggiornati (ZIP dal ramo `stabile`). Il Mac dell'utente è escluso (cartella git). Dettagli e prove in 06-manutenzione. Web v39.
 - Chi aveva già installato deve rilanciare l'installatore una volta.
+
+## 2026-11-04 · Copia del budget in altri mesi (app dell'utente + GitHub)
+- Budget › Categorie: copia del budget di tutto il mese o di una categoria nei mesi dopo, scelti con caselle (vedi 03). Provato su copia del file vero a 390 px: Novembre → Dicembre+Gennaio (tutte), Svago → Febbraio (solo quella, il resto invariato). Web v40.

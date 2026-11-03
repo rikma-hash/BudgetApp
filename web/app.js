@@ -1104,6 +1104,7 @@ async function loadBudget() {
     if (!m.current && m.this && !opts.some((o) => o.label === m.this.label)) opts.unshift({ label: m.this.label, sheet: null, date: m.this.date });
     if (!m.next.sheet) opts.push({ label: m.next.label, sheet: null, date: m.next.date });
     loadBudget.opts = opts;
+    loadBudget.months = m.months;
     if (!budgetTarget || !opts.some((o) => o.label === budgetTarget.label)) budgetTarget = opts[0];
     $("budget-pills").innerHTML = opts.map((o, i) =>
       `<button data-i="${i}" class="${o.label === budgetTarget.label ? "on" : ""}">${esc(o.label)}</button>`).join("");
@@ -1904,6 +1905,7 @@ $("cat-manage").addEventListener("click", async (e) => {
   const others = catManage.map((x) => x.category).filter((x) => x !== c.category);
   const res = await editCategory(c, month, others);
   if (!res) return;
+  if (res.action === "copy") return copyBudgetToMonths(c);
   try {
     if (res.action === "delete") {
       const r = await api("/api/categories/delete", { method: "POST", body: { name: c.category, move_to: res.moveTo || null } });
@@ -1945,7 +1947,9 @@ function editCategory(c, month, others) {
       }
       dlg.close("delete");
     };
+    $("cd-copy").onclick = () => dlg.close("copy");
     dlg.onclose = () => {
+      if (dlg.returnValue === "copy") return resolve({ action: "copy" });
       if (dlg.returnValue === "delete") return resolve({ action: "delete", moveTo: $("cd-move").value });
       if (dlg.returnValue === "ok") return resolve({ action: "save", name: $("cd-name").value.trim(), budget: parseAmount($("cd-budget").value) || 0 });
       resolve(null);
@@ -1954,6 +1958,42 @@ function editCategory(c, month, others) {
     dlg.showModal();
   });
 }
+
+// Copia il budget del mese scelto (tutte le categorie, oppure una sola) nei mesi dopo che scegli tu.
+// Entrate e surplus/deficit non cambiano: solo i budget delle categorie.
+async function copyBudgetToMonths(cat = null) {
+  const from = budgetTarget?.sheet;
+  if (!from) return toast("Questo mese non esiste ancora: salva prima il suo budget nel Piano.");
+  const months = loadBudget.months || [];
+  const i = months.findIndex((m) => m.sheet === from);
+  const later = months.slice(i + 1).filter((m) => m.editable);
+  if (!later.length) return toast(`Non ci sono mesi dopo ${from}`);
+  $("cm-title").textContent = cat ? `Copia ${cat.category}` : `Copia il budget di ${from}`;
+  $("cm-text").textContent = cat ? `Il budget di ${cat.category} a ${from} (${eur0(cat.budget || 0)}) va nei mesi che scegli.`
+    : `Il budget di tutte le categorie di ${from} va nei mesi che scegli. Entrate e surplus/deficit restano come sono.`;
+  $("cm-list").innerHTML = later.map((m, k) => `<li><label class="check"><input type="checkbox" value="${esc(m.sheet)}" ${k === 0 ? "checked" : ""}> ${esc(m.sheet)}</label></li>`).join("");
+  const boxes = () => [...$("cm-list").querySelectorAll("input")];
+  const sync = () => {
+    const n = boxes().filter((b) => b.checked).length;
+    $("cm-ok").disabled = !n;
+    $("cm-ok").textContent = n ? `Copia in ${n} ${n === 1 ? "mese" : "mesi"}` : "Copia";
+    $("cm-all").textContent = n === later.length ? "Togli tutti" : "Seleziona tutti";
+  };
+  $("cm-list").onchange = sync;
+  $("cm-all").onclick = () => { const all = boxes().every((b) => b.checked); boxes().forEach((b) => (b.checked = !all)); sync(); };
+  sync();
+  const dlg = $("copymonths");
+  dlg.returnValue = "";
+  dlg.showModal();
+  await new Promise((r) => (dlg.onclose = r));
+  if (dlg.returnValue !== "ok") return;
+  const targets = boxes().filter((b) => b.checked).map((b) => b.value);
+  try {
+    const r = await api("/api/budgets/copy", { method: "POST", body: { sheet: from, targets, category: cat?.category || null } });
+    toast(`✓ Budget ${cat ? `di ${cat.category} ` : ""}copiato in ${r.months.length} ${r.months.length === 1 ? "mese" : "mesi"}`);
+  } catch (err) { toast(failMsg(err)); }
+}
+$("cat-copy-all").addEventListener("click", () => copyBudgetToMonths());
 
 $("cat-add").addEventListener("click", async () => {
   const res = await askNumber("Nuova categoria", "Scrivi il nome e il budget al mese.", 0, true);
