@@ -664,13 +664,29 @@ class RowChanged(Exception):
     """La riga non contiene più la spesa attesa (il file è stato modificato nel frattempo)."""
 
 
-def _check_row(ws: Worksheet, row: int, expect: dict) -> None:
-    desc, amt = ws.cell(row, 3).value, ws.cell(row, 4).value
+def _row_matches(ws: Worksheet, row: int, expect: dict, desc_col: int, amt_col: int) -> bool:
+    desc, amt = ws.cell(row, desc_col).value, ws.cell(row, amt_col).value
+    return str(desc or "").strip() == str(expect.get("description", "")).strip() and \
+        isinstance(amt, (int, float)) and abs(float(amt) - float(expect.get("amount", -1))) <= 0.005
+
+
+def find_row(ws: Worksheet, row: int, expect: dict, first: int, last: int, desc_col: int, amt_col: int) -> int:
+    """La riga con la spesa attesa: quella indicata o, se le righe si sono spostate (es. modifiche fatte a Mac
+    spento e arrivate tutte insieme, o un'eliminazione prima), la più vicina con stessa descrizione e importo."""
+    if first <= row <= last and _row_matches(ws, row, expect, desc_col, amt_col):
+        return row
+    near = sorted(range(first, last + 1), key=lambda r: abs(r - row))
+    found = next((r for r in near if _row_matches(ws, r, expect, desc_col, amt_col)), None)
+    if found is None:
+        raise RowChanged(f"{ws.title}!{row}")
+    return found
+
+
+def _check_row(ws: Worksheet, row: int, expect: dict) -> int:
+    amt = ws.cell(row, 4).value
     if isinstance(amt, str) and amt.startswith("=SUMIFS("):
         raise ValueError("Questa riga è il totale di un viaggio: modifica le spese dalla sezione Viaggi")
-    if str(desc or "").strip() != str(expect.get("description", "")).strip() or \
-            not isinstance(amt, (int, float)) or abs(float(amt) - float(expect.get("amount", -1))) > 0.005:
-        raise RowChanged(f"{ws.title}!{row}")
+    return find_row(ws, row, expect, TX_FIRST, TX_LAST, 3, 4)
 
 
 def first_free_row(ws: Worksheet) -> int:
@@ -705,14 +721,14 @@ def delete_row(ws: Worksheet, row: int) -> None:
 
 def delete_expense(wb: openpyxl.Workbook, sheet: str, row: int, expect: dict) -> None:
     ws = wb[sheet]
-    _check_row(ws, row, expect)
+    row = _check_row(ws, row, expect)
     delete_row(ws, row)
 
 
 def update_expense(wb: openpyxl.Workbook, sheet: str, row: int, expect: dict, day: dt.date | None,
                    description: str, amount: float, category: str, note: str | None) -> dict:
     ws = wb[sheet]
-    _check_row(ws, row, expect)
+    row = _check_row(ws, row, expect)
     known = [c for c, _ in budget_table(ws)]
     cat = canonical(category, known) or category.strip()
     old = ws.cell(row, 2).value

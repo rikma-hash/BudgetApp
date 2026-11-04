@@ -915,7 +915,9 @@ def categories_list(sheet: str | None = None):
         return {"sheet": ws.title if ws.title != X.TEMPLATE else None,
                 "categories": [{"category": c["category"], "budget": c["budget"], "total": c["total"]}
                                for c in s["categories"]],
-                "free_slots": X.CAT_LAST - X.CAT_FIRST + 1 - len(X.categories(ws))}
+                "free_slots": X.CAT_LAST - X.CAT_FIRST + 1 - len(X.categories(ws)),
+                # entrate del mese: in Categorie servono per mostrare quanto è disponibile mentre cambi un budget
+                "income": X.income(ws) if X.is_new_layout(ws) else None}
 
 
 class RenameIn(BaseModel):

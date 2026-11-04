@@ -40,6 +40,8 @@ const EMOJI = [
 const emoji = (cat) => (EMOJI.find(([k]) => String(cat || "").toLowerCase().includes(k)) || [, "💶"])[1];
 
 function toast(msg) {
+  // modifica appena messa in coda a Mac spento: lo dico, così si sa che non è persa
+  if (Date.now() - lastQueuedAt < 2000 && !/Mac/.test(msg)) msg += " · sul telefono, arriva al Mac appena si accende";
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2800);
 }
@@ -49,6 +51,7 @@ function toast(msg) {
 const OFF_MAX = 60;
 const offKey = (path) => "api:" + path.replace(/([?&])day=[^&]*&?/, "$1").replace(/[?&]$/, "");
 let staleSince = null;  // ora della copia più vecchia mostrata mentre il Mac non risponde
+let onlyKey = null;     // mentre riapplico le modifiche in coda a una copia appena arrivata: tocco solo quella
 function offSave(path, value) {
   try {
     const idx = store.get("api-index", []).filter((k) => k !== offKey(path));
@@ -56,6 +59,12 @@ function offSave(path, value) {
     while (idx.length > OFF_MAX) localStorage.removeItem(idx.shift());
     localStorage.setItem(offKey(path), JSON.stringify({ t: Date.now(), v: value }));
     store.set("api-index", idx);
+    // la copia appena arrivata dal Mac non ha ancora le modifiche in coda: le riapplico solo a lei (onlyKey),
+    // se no "tornerebbero com'erano"; le altre copie le hanno già
+    if (!onlyKey && store.get("ops", []).length) {
+      onlyKey = offKey(path);
+      try { store.get("ops", []).forEach((op) => patchOffline(op)); } finally { onlyKey = null; }
+    }
   } catch { /* telefono pieno: pazienza, si resta senza copia */ }
 }
 function offLoad(path) {
@@ -67,9 +76,16 @@ function offLoad(path) {
 
 async function api(path, opts = {}) {
   const read = !opts.method || opts.method === "GET";
-  // con il Mac spento la richiesta può restare appesa a lungo: dopo un po' si rinuncia (letture: copia salvata, spese: coda)
+  // Mac spento: le letture mostrano subito la copia salvata (e intanto riprovo in sottofondo), senza aspettare
+  if (read && !online && !opts.fresh) {
+    const cached = offLoad(path);
+    if (cached) { revalidate(path); return cached; }
+  }
+  // con il Mac spento la richiesta può restare appesa a lungo: dopo un po' si rinuncia (letture: copia salvata, modifiche: coda)
+  const hasCopy = read && !!store.get(offKey(path), null);
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), opts.timeout || (read ? (online ? 8000 : 1500) : path.startsWith("/api/import") || path.startsWith("/api/advice") ? 120000 : online ? 12000 : 4000));
+  const timer = setTimeout(() => ctl.abort(), opts.timeout || (read ? (online ? (hasCopy ? 3000 : 8000) : 1500)
+    : path.startsWith("/api/import") || path.startsWith("/api/advice") ? 120000 : online ? 12000 : 4000));
   let res;
   try {
     res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts, signal: ctl.signal,
@@ -78,7 +94,12 @@ async function api(path, opts = {}) {
     clearTimeout(timer);
     err.network = true;  // solo questi errori vogliono dire "il Mac non risponde"
     const cached = read ? offLoad(path) : null;
-    if (cached) { if (online) setOnline(false); return cached; }
+    if (cached) { if (online) setOnline(false); revalidate(path); return cached; }
+    if (!read && !opts.noQueue && queueable(path)) {  // modifica a Mac spento: in coda, e la vedi già
+      queueOp(path, opts.method, opts.body);
+      if (online) setOnline(false);
+      return { status: "ok", offline: true };
+    }
     throw err;
   }
   clearTimeout(timer);
@@ -86,6 +107,251 @@ async function api(path, opts = {}) {
   const value = await res.json();
   if (read) { offSave(path, value); if (!online || staleSince) { staleSince = null; setOnline(true); } }
   return value;
+}
+
+/** Riprova una lettura in sottofondo (una alla volta): appena il Mac risponde torno in linea e mando le modifiche. */
+async function revalidate(path) {
+  if (revalidate.busy || Date.now() - (revalidate.last || 0) < 8000) return;
+  revalidate.busy = true; revalidate.last = Date.now();
+  try {
+    const r = await fetch(path, { signal: AbortSignal.timeout?.(10000) });
+    if (r.ok) {
+      offSave(path, await r.json());
+      staleSince = null;
+      setOnline(true);
+      await flushOps(); flushQueue(); refresh();
+    }
+  } catch {} finally { revalidate.busy = false; }
+}
+
+// ---------- modifiche a Mac spento ----------
+// Ogni modifica che non arriva al Mac (budget, piano, spese già salvate, categorie, abbonamenti, viaggi…) resta qui
+// in ordine e parte appena il Mac risponde. Intanto correggo le copie salvate nel telefono (patchOffline), così la
+// modifica si vede subito e non "torna com'era" rientrando. Le spese nuove hanno la loro coda (queue).
+const NO_QUEUE_EXACT = new Set(["/api/expenses", "/api/trips/expense"]);
+const NO_QUEUE_PREFIX = ["/api/suggest", "/api/diag", "/api/advice", "/api/import", "/api/update"];
+const queueable = (path) => !NO_QUEUE_EXACT.has(path) && !NO_QUEUE_PREFIX.some((p) => path.startsWith(p));
+const ops = () => store.get("ops", []);
+const setOps = (q) => store.set("ops", q);
+let lastQueuedAt = 0;  // per dire nel messaggio che la modifica è sul telefono
+
+function queueOp(path, method, body) {
+  const q = ops();
+  // il piano salvato più volte di fila: basta l'ultima versione (contiene tutto)
+  const last = q.at(-1);
+  if (last && path === "/api/budgets" && last.path === path && body?.full && last.body?.full && last.body.sheet === body.sheet) q.pop();
+  q.push({ id: uid(), path, method, body, t: Date.now() });
+  setOps(q);
+  lastQueuedAt = Date.now();
+  patchOffline({ path, body });
+  renderStatus();
+}
+
+async function flushOps() {
+  if (flushOps.busy) return;
+  const q = ops();
+  if (!q.length) return;
+  flushOps.busy = true;
+  let sent = 0;
+  try {
+    while (ops().length) {
+      const op = ops()[0];
+      try { await api(op.path, { method: op.method, body: op.body, noQueue: true }); sent++; }
+      catch (err) {
+        if (err.network) break;                                         // Mac ancora spento: riprovo dopo
+        if (err.status === 409 && /Excel/.test(err.message)) break;     // file aperto in Excel: riprovo dopo
+        toast(`Una modifica fatta a Mac spento non è andata: ${err.message}`);
+        window.__diag?.(`modifica offline scartata ${op.path}: ${err.message}`);
+      }
+      setOps(ops().filter((o) => o.id !== op.id));
+    }
+  } finally { flushOps.busy = false; }
+  if (sent) {
+    toast(`${sent} ${sent === 1 ? "modifica fatta a Mac spento inviata" : "modifiche fatte a Mac spento inviate"}`);
+    renderStatus();
+  }
+}
+
+// --- correzioni delle copie salvate ---
+const lc = (x) => String(x || "").toLowerCase();
+const K = {
+  cats: (s) => offKey("/api/categories?sheet=" + encodeURIComponent(s)),
+  month: (s) => offKey("/api/month?sheet=" + encodeURIComponent(s)),
+  prop: (s) => offKey("/api/budget/proposal?" + new URLSearchParams({ save_rate: 0, sheet: s })),
+  subs: (s) => offKey("/api/subscriptions?sheet=" + encodeURIComponent(s)),
+  trip: (n) => offKey("/api/trip?name=" + encodeURIComponent(n)),
+  state: offKey("/api/state"), profile: offKey("/api/profile"), year: offKey("/api/year"), trips: offKey("/api/trips"),
+};
+function offEdit(key, fn) {
+  if (onlyKey && key !== onlyKey) return;
+  const c = store.get(key, null);
+  if (!c) return;
+  fn(c.v);
+  store.set(key, c);
+}
+const offAll = () => store.get("api-index", []);
+const r2 = (x) => Math.round(x * 100) / 100;
+const weekOf = (iso) => Math.min(5, Math.floor((new Date(iso + "T12:00").getDate() - 1) / 7) + 1);
+const sheetOf = (iso) => MONTHS[new Date(iso + "T12:00").getMonth()];
+
+/** Riepilogo del mese (categorie, settimane, totale): aggiungo/tolgo una spesa. */
+function adjSummary(sum, category, week, amount) {
+  if (!sum) return;
+  let c = sum.categories.find((x) => lc(x.category) === lc(category));
+  if (!c) { c = { category, budget: 0, weeks: [0, 0, 0, 0, 0], total: 0, left: 0 }; sum.categories.push(c); }
+  if (c.weeks && week) c.weeks[week - 1] = r2((c.weeks[week - 1] || 0) + amount);
+  c.total = r2((c.total || 0) + amount);
+  c.left = r2((c.budget || 0) - c.total);
+  sum.total = r2((sum.total || 0) + amount);
+}
+function setBudgetsIn(list, budgets, withLeft = true) {
+  for (const [cat, val] of Object.entries(budgets)) {
+    let c = list.find((x) => lc(x.category) === lc(cat));
+    if (!c) { c = { category: cat, budget: 0, total: 0, weeks: [0, 0, 0, 0, 0] }; list.push(c); }
+    c.budget = +val || 0;
+    if (withLeft) c.left = r2(c.budget - (c.total || 0));
+  }
+}
+function incomeWith(old, inc) {
+  if (!inc) return old;
+  const out = { ...old, ...inc };
+  const base = Array.isArray(inc.items) ? inc.items.reduce((a, i) => a + (+i.amount || 0), 0)
+    : ["borsa", "personale", "famiglia", "altro"].reduce((a, k) => a + (+out[k] || 0), 0);
+  out.base = r2(base);
+  out.riporto = inc.riporto != null ? +inc.riporto : 0;
+  out.total = r2(base + (inc.riporto != null ? +inc.riporto : 0));
+  return out;
+}
+function patchBudgets(sheet, budgets, income) {
+  offEdit(K.cats(sheet), (v) => { setBudgetsIn(v.categories, budgets, false); if (income && v.income) v.income = incomeWith(v.income, income); });
+  const sum = (v) => { setBudgetsIn(v.categories, budgets); v.budget = r2(v.categories.reduce((a, c) => a + (c.budget || 0), 0)); if (income && v.income) v.income = incomeWith(v.income, income); };
+  offEdit(K.month(sheet), (v) => sum(v.summary));
+  offEdit(K.state, (v) => { if (v.summary?.sheet === sheet) sum(v.summary); });
+  offEdit(K.prop(sheet), (v) => {
+    for (const [cat, val] of Object.entries(budgets)) { const r = v.rows.find((x) => lc(x.category) === lc(cat)); if (r) r.current = +val || 0; }
+    if (income) { v.income = incomeWith(v.income, income); v.carry_included = income.riporto != null; }
+  });
+  offEdit(K.year, (v) => { const m = v.months?.find((x) => x.sheet === sheet); if (m) { const c = store.get(K.cats(sheet), null); if (c) m.budget = r2(c.v.categories.reduce((a, x) => a + (x.budget || 0), 0)); } });
+}
+function findTx(list, row, expect, sheetName) {
+  const ok = (t) => (!sheetName || t.sheet === sheetName) && t.description === expect.description && Math.abs(t.amount - expect.amount) < 0.005;
+  return list.find((t) => t.row === row && ok(t)) || list.find(ok);
+}
+function patchExpense(sheetName, row, expect, change) {  // change = null → eliminata
+  let old = null;
+  offEdit(K.month(sheetName), (v) => {
+    const t = findTx(v.transactions, row, expect, sheetName); if (!t) return;
+    old = { ...t };
+    adjSummary(v.summary, t.category, t.week, -t.amount);
+    if (!change || (change.date && sheetOf(change.date) !== sheetName)) {
+      v.transactions = v.transactions.filter((x) => x !== t);
+      v.transactions.forEach((x) => { if (x.sheet === sheetName && x.row > t.row) x.row--; });
+    } else {
+      Object.assign(t, change, { week: change.date ? weekOf(change.date) : t.week });
+      adjSummary(v.summary, t.category, t.week, t.amount);
+    }
+  });
+  offEdit(K.state, (v) => {
+    const t = findTx(v.recent || [], row, expect, sheetName);
+    const src = t || old;
+    if (v.summary?.sheet === sheetName && src) adjSummary(v.summary, src.category, src.week || weekOf(src.date), -src.amount);
+    if (t) {
+      if (!change) {
+        v.recent = v.recent.filter((x) => x !== t);
+        v.recent.forEach((x) => { if (x.sheet === sheetName && x.row > t.row) x.row--; });
+      } else Object.assign(t, change, { week: change.date ? weekOf(change.date) : t.week });
+    }
+    if (change && src) {
+      const date = change.date || src.date;
+      if (v.summary?.sheet === sheetOf(date)) adjSummary(v.summary, change.category || src.category, weekOf(date), change.amount ?? src.amount);
+    }
+  });
+  if (change?.date && sheetOf(change.date) !== sheetName && old) {
+    offEdit(K.month(sheetOf(change.date)), (v) => {
+      const t = { ...old, ...change, sheet: sheetOf(change.date), week: weekOf(change.date), row: 9999 };
+      v.transactions.unshift(t);
+      adjSummary(v.summary, t.category, t.week, t.amount);
+    });
+  }
+}
+function tripTotals(v) {
+  const s = v.summary;
+  for (const c of s.categories) c.total = r2(v.transactions.filter((t) => lc(t.category) === lc(c.category)).reduce((a, t) => a + t.amount, 0));
+  s.categories.forEach((c) => (c.left = r2((c.budget || 0) - c.total)));
+  s.total = r2(v.transactions.reduce((a, t) => a + t.amount, 0));
+  s.budget = r2(s.categories.reduce((a, c) => a + (c.budget || 0), 0));
+  s.count = v.transactions.length;
+  offEdit(K.trips, (l) => { const t = l.trips?.find((x) => x.name === s.name); if (t) Object.assign(t, { total: s.total, budget: s.budget, count: s.count, categories: s.categories }); });
+}
+function renameDeep(obj, from, to) {
+  if (Array.isArray(obj)) return obj.forEach((x) => renameDeep(x, from, to));
+  if (!obj || typeof obj !== "object") return;
+  for (const k of Object.keys(obj)) {
+    if (k === "category" && lc(obj[k]) === lc(from)) obj[k] = to;
+    else renameDeep(obj[k], from, to);
+  }
+  if (Array.isArray(obj.categories)) obj.categories = obj.categories.map((c) => (typeof c === "string" && lc(c) === lc(from) ? to : c));
+}
+
+function patchOffline({ path, body: b }) {
+  try {
+    if (path === "/api/budgets") patchBudgets(b.sheet || (b.date ? sheetOf(b.date) : data?.summary?.sheet), b.budgets || {}, b.income && Object.keys(b.income).length ? b.income : null);
+    else if (path === "/api/budgets/copy") {
+      const src = store.get(K.cats(b.sheet), null)?.v.categories || [];
+      const budgets = Object.fromEntries(src.filter((c) => !b.category || lc(c.category) === lc(b.category)).map((c) => [c.category, c.budget || 0]));
+      b.targets.forEach((t) => patchBudgets(t, budgets));
+    }
+    else if (path === "/api/expenses/edit") patchExpense(b.sheet, b.row, b.expect, { description: b.description, amount: b.amount, category: b.category, note: b.note, ...(b.date ? { date: b.date } : {}) });
+    else if (path === "/api/expenses/delete") patchExpense(b.sheet, b.row, b.expect, null);
+    else if (path === "/api/profile") offEdit(K.profile, (v) => Object.assign(v, b));
+    else if (path === "/api/subscriptions") offEdit(K.subs(b.sheet), (v) => { v.items = b.items.map((i, k) => ({ ...(v.items[k] || {}), ...i, label: i.name })); });
+    else if (path === "/api/categories/rename") offAll().forEach((k) => offEdit(k, (v) => renameDeep(v, b.old, b.new)));
+    else if (path === "/api/categories/add") {
+      offEdit(K.cats(b.sheet), (v) => { if (!v.categories.some((c) => lc(c.category) === lc(b.name))) v.categories.push({ category: b.name, budget: b.budget || 0, total: 0 }); });
+      offEdit(K.prop(b.sheet), (v) => v.rows.some((c) => lc(c.category) === lc(b.name)) || v.rows.push({ category: b.name, current: b.budget || 0, avg: 0, last: 0, months_over: 0, kind: "variabile", raw: 0, proposal: 0 }));
+      patchBudgets(b.sheet, { [b.name]: b.budget || 0 });
+    }
+    else if (path === "/api/categories/delete") offAll().forEach((k) => offEdit(k, (v) => {
+      const drop = (list) => list.filter((c) => typeof c === "string" ? lc(c) !== lc(b.name) : lc(c.category) !== lc(b.name));
+      if (v.summary?.categories) {
+        const gone = v.summary.categories.find((c) => lc(c.category) === lc(b.name));
+        const to = b.move_to && v.summary.categories.find((c) => lc(c.category) === lc(b.move_to));
+        if (gone && to) { to.total = r2(to.total + gone.total); to.weeks = (to.weeks || []).map((w, i) => r2(w + (gone.weeks?.[i] || 0))); to.left = r2(to.budget - to.total); }
+        else if (gone) v.summary.total = r2(v.summary.total - gone.total);
+        v.summary.categories = drop(v.summary.categories);
+      }
+      if (Array.isArray(v.categories)) v.categories = drop(v.categories);
+      if (Array.isArray(v.rows)) v.rows = drop(v.rows);
+      for (const list of [v.transactions, v.recent]) (list || []).forEach((t) => { if (lc(t.category) === lc(b.name)) t.category = b.move_to || ""; });
+    }));
+    else if (path === "/api/trips/budget") offEdit(K.trip(b.trip), (v) => { const c = v.summary.categories.find((x) => lc(x.category) === lc(b.category)); if (c) c.budget = +b.budget || 0; tripTotals(v); });
+    else if (path === "/api/trips/category") offEdit(K.trip(b.trip), (v) => { if (v.categories.some((c) => lc(c) === lc(b.name))) return; v.summary.categories.push({ category: b.name, budget: +b.budget || 0, total: 0, left: 0 }); v.categories.push(b.name); v.free_slots--; tripTotals(v); });
+    else if (path === "/api/trips/copy-budget") {
+      const src = store.get(K.trip(b.source), null)?.v.summary.categories.filter((c) => !c.virtual) || [];
+      offEdit(K.trip(b.trip), (v) => {
+        for (const c of src) {
+          const d = v.summary.categories.find((x) => lc(x.category) === lc(c.category));
+          if (d) d.budget = c.budget; else { v.summary.categories.push({ category: c.category, budget: c.budget, total: 0, left: 0 }); v.categories.push(c.category); }
+        }
+        tripTotals(v);
+      });
+    }
+    else if (path === "/api/trips/edit") offEdit(K.trip(b.trip), (v) => { const t = findTx(v.transactions, b.row, b.expect); if (t) Object.assign(t, { description: b.description, amount: b.amount, category: b.category, note: b.note, ...(b.date ? { date: b.date } : {}) }); tripTotals(v); });
+    else if (path === "/api/trips/delete-expense") offEdit(K.trip(b.trip), (v) => {
+      const t = findTx(v.transactions, b.row, b.expect); if (!t) return;
+      v.transactions = v.transactions.filter((x) => x !== t);
+      v.transactions.forEach((x) => { if (x.row > t.row) x.row--; });
+      tripTotals(v);
+    });
+    else if (path === "/api/trips") {
+      const src = b.copy_from && store.get(K.trip(b.copy_from), null)?.v.summary.categories.filter((c) => !c.virtual);
+      const cats = (src || []).map((c) => ({ category: c.category, budget: c.budget, total: 0, left: c.budget }));
+      const summary = { name: b.name, sheet: null, categories: cats, budget: r2(cats.reduce((a, c) => a + c.budget, 0)), total: 0, count: 0, from: null, to: null };
+      if (!onlyKey) offSave("/api/trip?name=" + encodeURIComponent(b.name), { summary, transactions: [], categories: cats.map((c) => c.category), free_slots: 8 });
+      offEdit(K.trips, (v) => { if (!v.trips.some((t) => t.name === b.name)) v.trips.unshift({ ...summary }); });
+    }
+    else if (path === "/api/trips/delete") offEdit(K.trips, (v) => { v.trips = v.trips.filter((t) => t.name !== b.name); });
+  } catch (err) { window.__diag?.(`copia offline non aggiornata (${path}): ${err}`); }
 }
 
 let online = true;
@@ -118,11 +384,13 @@ async function refresh() {
 function renderStatus() {
   const msgs = [];
   if (data?.problem) msgs.push(["", "⚠️ " + data.problem]);
-  if (!online) msgs.push(["", "📡 Il Mac non è raggiungibile: le nuove spese restano sul telefono e partono dopo. Se il Mac è acceso, controlla che Tailscale sia attivo sul telefono."]);
-  if (!online && staleSince) msgs.push(["warn", `🕘 Stai vedendo i dati del ${new Date(staleSince).toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: si possono solo guardare.`]);
+  if (!online) msgs.push(["", "📡 Il Mac non è raggiungibile: spese e modifiche restano sul telefono e partono dopo. Se il Mac è acceso, controlla che Tailscale sia attivo sul telefono."]);
+  if (!online && staleSince) msgs.push(["warn", `🕘 Stai vedendo i dati del ${new Date(staleSince).toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}: quello che cambi parte appena il Mac risponde.`]);
   if (data?.excel_open) msgs.push(["warn", "📗 Il file è aperto in Excel sul Mac: le spese verranno scritte quando lo chiudi."]);
   const q = queue().length + (data?.pending || 0);
   if (q) msgs.push(["info", `⏳ ${q} ${q === 1 ? "spesa in attesa" : "spese in attesa"} di essere scritte`]);
+  const o = ops().length;
+  if (o) msgs.push(["info", `⏳ ${o} ${o === 1 ? "modifica fatta a Mac spento" : "modifiche fatte a Mac spento"}: ${o === 1 ? "parte" : "partono"} appena il Mac risponde`]);
   $("status").hidden = !msgs.length;
   $("status").innerHTML = msgs.map(([c, m]) => `<div class="${c}">${esc(m)}</div>`).join("");
 }
@@ -134,6 +402,7 @@ const knownCats = () => (data?.summary?.categories || []).map((c) => c.category)
 function go(name, opts = {}) {
   if (name === "savings") { name = "budget"; budgetMode = "sav"; }
   view = ["home", "history", "trips", "budget", "import", "settings"].includes(name) ? name : "home";
+  if (view !== "budget") document.body.classList.remove("has-plan-bar");
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== "view-" + view));
   document.querySelectorAll("#tabs [data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === ({ import: "history", settings: "home" }[view] || view)));
   if (location.hash !== "#" + view) history.replaceState(null, "", "#" + view);
@@ -193,11 +462,12 @@ function renderHome() {
     + queue().filter((t) => t.date === today() && !t.trip && !isExcluded(t.category)).reduce((a, t) => a + t.amount, 0);
   $("home-excl").innerHTML = exclHtml();
 
+  // in grande quanto hai speso; sotto quanto ti resta del budget totale del mese (somma delle categorie)
   $("hero").innerHTML = (s.budget > 0 ? `
-      <p class="big-label">${left >= 0 ? "Ti restano questo mese" : "Hai superato il budget di"}${s.label}</p>
-      <div class="big-num ${left < 0 ? "neg" : ""}">${eur(Math.abs(left))}</div>
+      <p class="big-label">Hai speso questo mese${s.label}</p>
+      <div class="big-num ${left < 0 ? "neg" : ""}">${eur(s.total)}</div>
       <div class="progress"><i class="${left < 0 ? "over" : ""}" style="width:${Math.min(100, (s.total / s.budget) * 100)}%"></i></div>
-      <div class="meta"><span>Speso ${eur(s.total)} di ${eur0(s.budget)}</span><span>${daysLeft} giorni alla fine del mese</span></div>`
+      <div class="meta"><span class="${left < 0 ? "neg" : ""}">${left >= 0 ? `Ti restano ${eur(left)} di ${eur0(s.budget)}` : `Hai superato il budget di ${eur(-left)} (${eur0(s.budget)})`}</span><span>${daysLeft} giorni alla fine del mese</span></div>`
     : `
       <p class="big-label">Hai speso questo mese${s.label}</p>
       <div class="big-num">${eur(s.total)}</div>
@@ -215,8 +485,7 @@ function renderHome() {
   $("home-recent").onclick = (e) => {
     const li = e.target.closest("li[data-i]"); if (!li) return;
     const t = rows[+li.dataset.i];
-    if (t.queued) return toast("Questa spesa è ancora in attesa: la puoi modificare quando arriva sul Mac.");
-    if (t.trip) return go("trips", { trip: t.trip });
+    if (t.trip && !t.queued) return go("trips", { trip: t.trip });
     openEdit(t, knownCats(), true, refresh);
   };
 }
@@ -247,8 +516,8 @@ let homeRows = [], monthFlat = [];
 const SWIPE = 92;  // larghezza del pulsante rosso
 
 async function deleteTx(t, trip, after) {
-  if (!online) return toast("Per modificare o eliminare una spesa serve il Mac acceso.");
   if (!(await askConfirm("Eliminare la spesa?", `${t.description} · ${eur(t.amount)}`))) return;
+  if (t.queued) { setQueue(queue().filter((e) => e.id !== t.id)); toast("Spesa eliminata"); return after?.(); }
   try {
     const expect = { description: t.description, amount: t.amount };
     if (trip) await api("/api/trips/delete-expense", { method: "POST", body: { trip, row: t.row, expect } });
@@ -391,7 +660,6 @@ $("where-pills").addEventListener("click", (e) => {
 });
 
 function openEdit(t, cats, editable, onDone, trip = null) {
-  if (!online) return toast("Per modificare o eliminare una spesa serve il Mac acceso.");
   sheet = { mode: "edit", cats, editable, tx: t, onDone, trip };
   newCatOpen = false;
   $("sheet-title").textContent = "Modifica spesa";
@@ -740,6 +1008,7 @@ async function send(exp) {
 }
 
 async function flushQueue() {
+  await flushOps();  // prima le modifiche (es. viaggio creato a Mac spento), poi le spese nuove
   const q = queue();
   if (!q.length) return;
   const left = [];
@@ -769,6 +1038,12 @@ $("form").addEventListener("submit", async (ev) => {
 
   if (sheet.mode === "edit") {
     const t = sheet.tx;
+    if (t.queued) {  // spesa ancora sul telefono (non arrivata al Mac): la cambio direttamente nella coda
+      setQueue(queue().map((e) => (e.id === t.id ? { ...e, ...base } : e)));
+      toast("Modifica salvata");
+      closeSheet();
+      return sheet.onDone?.();
+    }
     const expect = { description: t.description, amount: t.amount };
     try {
       const r = sheet.trip
@@ -810,6 +1085,7 @@ $("form").addEventListener("submit", async (ev) => {
 $("sheet-delete").addEventListener("click", async () => {
   const t = sheet.tx;
   if (!t || !(await askConfirm("Eliminare la spesa?", `${t.description} · ${eur(t.amount)}`))) return;
+  if (t.queued) { setQueue(queue().filter((e) => e.id !== t.id)); toast("Spesa eliminata"); closeSheet(); return sheet.onDone?.(); }
   try {
     const expect = { description: t.description, amount: t.amount };
     if (sheet.trip) await api("/api/trips/delete-expense", { method: "POST", body: { trip: sheet.trip, row: t.row, expect } });
@@ -1018,6 +1294,8 @@ function setBudgetMode(mode) {
   budgetMode = mode;
   document.querySelectorAll("#budget-seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   $("bud-plan").hidden = mode !== "plan";
+  $("plan-bar").hidden = mode !== "plan" || !proposalData;
+  document.body.classList.toggle("has-plan-bar", !$("plan-bar").hidden);
   $("bud-cats").hidden = mode !== "cats";
   $("bud-sav").hidden = mode !== "sav";
   $("budget-pills").hidden = mode === "sav";
@@ -1118,6 +1396,7 @@ async function loadBudget() {
 
 $("budget-pills").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-i]"); if (!b) return;
+  savePlan();  // le cifre appena scritte vanno nel mese di prima, non in quello nuovo
   budgetTarget = loadBudget.opts[+b.dataset.i];
   document.querySelectorAll("#budget-pills button").forEach((x) => x.classList.toggle("on", x === b));
   budgetMode === "cats" ? loadCatManage() : fetchProposal();
@@ -1130,7 +1409,7 @@ function setSave(rate, fixed) {
 const saveEuro = () => saveFixed != null ? saveFixed : Math.round(typedBase() * saveRate / 100);
 
 // Scelte del piano per ogni mese (quanto mettere da parte, se contare il surplus/deficit e quanto): nel profilo sul Mac,
-// salvate appena le cambi, così rientrando nell'app (o da un altro dispositivo) restano. Il file cambia solo con Salva.
+// salvate appena le cambi, così rientrando nell'app (o da un altro dispositivo) restano.
 function rememberPlan() {
   if (!budgetTarget) return;
   profile.plan = { ...profile.plan, [budgetTarget.label]: { rate: saveRate, fixed: saveFixed, carry: useCarry, riporto: typedCarry() } };
@@ -1159,6 +1438,7 @@ $("carry-seg").addEventListener("click", (e) => {
   setCarry(b.dataset.use === "1");
   renderProposal();
   rememberPlan();
+  scheduleSave();
 });
 
 function setCarry(on) {
@@ -1195,8 +1475,9 @@ async function fetchProposal() {
   } else if (profile.plan_rate != null) setSave(profile.plan_rate, null);
   const month = budgetTarget.label;
   $("step1-title").textContent = `Quanto ti entra a ${month}?`;
-  $("apply-following").checked = false;
-  $("apply-following-text").textContent = `Usa lo stesso budget anche per i mesi dopo ${month}`;
+  $("prop-copy").textContent = `📋 Copia il budget di ${month} nei mesi dopo`;
+  planSaved = "saved";
+  setBudgetMode(budgetMode);
   renderProposal();
 }
 
@@ -1214,6 +1495,7 @@ $("inc-list").addEventListener("input", (e) => {
   const inp = e.target.closest("input[data-inc]"); if (!inp) return;
   incItems[+inp.dataset.inc].amount = parseAmount(inp.value) || 0;
   renderProposal();
+  scheduleSave();
 });
 $("inc-add").addEventListener("click", async () => {
   const res = await askNumber("Nuova entrata", "Scrivi il nome e quanto ti entra al mese.", 0, true);
@@ -1221,13 +1503,12 @@ $("inc-add").addEventListener("click", async () => {
   if (incItems.some((i) => i.name.toLowerCase() === res.name.toLowerCase())) return toast(`${res.name} c'è già`);
   if (incItems.length >= 10) return toast("Puoi avere al massimo 10 entrate");
   incItems.push({ name: res.name, amount: res.value });
-  renderIncome(); renderProposal();
-  toast("Premi «Usa questo budget» per salvarla");
+  renderIncome(); renderProposal(); scheduleSave();
 });
 function removeIncome(it) {
   incItems = incItems.filter((x) => x !== it);
-  renderIncome(); renderProposal();
-  toast(`${it.name} tolta · premi «Usa questo budget» per salvare`);
+  renderIncome(); renderProposal(); scheduleSave();
+  toast(`${it.name} tolta`);
 }
 enableSwipe($("inc-list"), (li) => incItems?.[+li.dataset.i], removeIncome);
 // sul Mac (niente scorrimento col mouse): un clic sul nome chiede se toglierla
@@ -1239,28 +1520,28 @@ $("inc-list").addEventListener("click", async (e) => {
 const typedCarry = () => parseAmount($("inc-riporto").value) || 0;
 const allRows = () => [...proposalData.rows, ...propExtra];
 
-/** Cifre proposte per ogni riga (prima delle modifiche a mano). */
+/** Cifre proposte per ogni riga, in base allo storico, al quiz e a quanto puoi spendere (non a quello che hai scritto). */
 function proposedValues() {
   const p = proposalData;
   const target = typedBase() - saveEuro() + (useCarry ? typedCarry() : 0);
   const rows = allRows();
-  const fixed = rows.filter((r) => r.kind !== "variabile").reduce((a, r) => a + (propEdits[r.category] ?? r.proposal), 0);
-  // le variabili cambiate a mano restano ferme; le altre si dividono quello che avanza
-  const free = rows.filter((r) => r.kind === "variabile" && propEdits[r.category] == null);
-  const manual = rows.filter((r) => r.kind === "variabile" && propEdits[r.category] != null).reduce((a, r) => a + propEdits[r.category], 0);
+  const fixed = rows.filter((r) => r.kind !== "variabile").reduce((a, r) => a + (r.kind === "nuova" ? (propEdits[r.category] ?? 0) : r.proposal), 0);
+  const free = rows.filter((r) => r.kind === "variabile");
   const raw = (r) => (r.raw || 0) * quizFactor(r.category);
   const rawSum = free.reduce((a, r) => a + raw(r), 0);
-  const k = rawSum ? Math.max(0, target - fixed - manual) / rawSum : 0;
+  const k = rawSum ? Math.max(0, target - fixed) / rawSum : 0;
   const plainK = p.rows.filter((r) => r.kind === "variabile").reduce((a, r) => a + (r.raw || 0), 0);
-  const vals = rows.map((r) => propEdits[r.category] ?? (r.kind === "variabile" ? Math.max(0, Math.round((raw(r) * k) / 5) * 5) : r.proposal));
+  const vals = rows.map((r) => r.kind === "variabile" ? Math.max(0, Math.round((raw(r) * k) / 5) * 5) : r.kind === "nuova" ? (propEdits[r.category] ?? 0) : r.proposal);
   // l'arrotondamento a 5 € lascia qualche euro in più o in meno: va nella variabile più grande
-  const freeIdx = rows.map((r, i) => i).filter((i) => free.includes(rows[i]));
+  const freeIdx = rows.map((r, i) => i).filter((i) => rows[i].kind === "variabile");
   if (freeIdx.length && k > 0) {
     const big = freeIdx.reduce((a, i) => (vals[i] > vals[a] ? i : a), freeIdx[0]);
     vals[big] = Math.max(0, Math.round(vals[big] + target - vals.reduce((a, v) => a + v, 0)));
   }
   return { vals, k, rawSum, plainK };
 }
+/** Il tuo budget per ogni riga: quello scritto ora, altrimenti quello salvato nel file. */
+const yourValues = () => allRows().map((r) => propEdits[r.category] ?? (r.kind === "nuova" ? 0 : r.current || 0));
 
 function renderProposal(keepSaveInput = false) {
   const p = proposalData;
@@ -1291,15 +1572,17 @@ function renderProposal(keepSaveInput = false) {
   if (rawSum && k < 0.85) notes.push(`Per starci dentro, le spese variabili scendono del ${Math.round((1 - k) * 100)}% rispetto al solito.`);
   $("prop-notes").innerHTML = notes.map((n) => `<li>${esc(n)}</li>`).join("");
 
-  // due colonne: a sinistra la cifra proposta (si può cambiare), a destra il budget che c'è ora nel file
-  $("prop-list").innerHTML = `<li class="cols-head"><span></span><span></span><span>Proposto</span><span>Messo</span></li>` + rows.map((r, i) => {
-    const hintTxt = r.kind === "nuova" ? "nuova · si crea quando salvi" : r.kind === "fissa" ? "spesa fissa"
+  // due colonne: la cifra proposta (riferimento) e il tuo budget (si scrive qui e si salva da solo)
+  const yours = yourValues();
+  $("prop-use").hidden = !rows.length;
+  $("prop-list").innerHTML = `<li class="cols-head"><span></span><span></span><span>Proposto</span><span>Il tuo</span></li>` + rows.map((r, i) => {
+    const hintTxt = r.kind === "nuova" ? "nuova · si crea quando si salva" : r.kind === "fissa" ? "spesa fissa"
       : r.avg ? `di solito ${eur0(r.avg)}` : "nessuno storico";
     const tuned = r.kind === "variabile" && quizFactor(r.category) !== 1 ? " · 🎯" : "";
     return `<li><span class="emoji">${emoji(r.category)}</span>
       <div class="what"><b>${esc(r.category).replace(/\//g, "/<wbr>")}</b><span>${hintTxt}${r.months_over >= 2 ? " · spesso sforata" : ""}${tuned}</span></div>
-      <input data-i="${i}" inputmode="decimal" value="${numIn(vals[i])}" aria-label="Budget ${esc(r.category)}">
-      <span class="real" data-real="${i}">${r.kind === "nuova" ? "—" : eur0(r.current || 0)}</span></li>`;
+      <span class="real" data-prop="${i}">${eur0(vals[i])}</span>
+      <input data-i="${i}" inputmode="decimal" value="${numIn(yours[i])}" aria-label="Budget ${esc(r.category)}"></li>`;
   }).join("");
   $("prop-add-new").hidden = rows.length >= 15;
   updatePropTotal();
@@ -1315,13 +1598,20 @@ function updatePropTotal() {
   const typed = typedBudgets();
   const assigned = typed.reduce((a, b) => a + b, 0);
   const left = spendable - assigned;
-  const real = allRows().reduce((a, r) => a + (r.kind === "nuova" ? 0 : r.current || 0), 0);
-  // colonna "Messo": evidenzio le cifre diverse da quella proposta
-  allRows().forEach((r, i) => document.querySelector(`[data-real="${i}"]`)?.classList.toggle("diff", r.kind !== "nuova" && Math.abs((r.current || 0) - typed[i]) >= 0.5));
-  $("prop-total").innerHTML = `<div><span>Dovresti avere</span><b>${eur0(spendable)}</b></div>
-    <div><span>Proposto (somma)</span><b>${eur0(assigned)}</b></div>
-    <div><span>Messo ora (somma)</span><b class="${real - spendable > 0.5 ? "neg" : ""}">${eur0(real)}</b></div>
-    <div class="state ${left < -0.5 ? "neg" : ""}">${Math.abs(left) < 0.5 ? "✓ Tutto assegnato" : left > 0 ? `Da assegnare ${eur0(left)}` : `Troppo: ${eur0(-left)}`}</div>`;
+  const { vals } = proposedValues();
+  const proposed = vals.reduce((a, b) => a + b, 0);
+  // colonna "Proposto": evidenzio quando il tuo budget è diverso
+  vals.forEach((v, i) => document.querySelector(`[data-prop="${i}"]`)?.classList.toggle("diff", Math.abs(v - (typed[i] || 0)) >= 0.5));
+  $("prop-total").innerHTML = `<div><span>Puoi spendere</span><b>${eur0(spendable)}</b></div>
+    <div><span>Proposto (somma)</span><b>${eur0(proposed)}</b></div>
+    <div><span>Il tuo budget (somma)</span><b class="${-left > 0.5 ? "neg" : ""}">${eur0(assigned)}</b></div>
+    <div class="state ${left < -0.5 ? "neg" : ""}">${Math.abs(left) < 0.5 ? "✓ Tutto diviso" : left > 0 ? `Da dividere ${eur0(left)}` : `Sfori di ${eur0(-left)}`}</div>`;
+  // barra fissa in basso: mentre scrivi vedi subito quanto hai a disposizione e se sfori (e di quanto)
+  $("plan-bar").className = "plan-bar" + (left < -0.5 ? " neg" : Math.abs(left) < 0.5 ? " ok" : "");
+  $("plan-bar").innerHTML = `<div><small>Disponibile</small><b>${eur0(spendable)}</b></div>
+    <div><small>Nelle categorie</small><b>${eur0(assigned)}</b></div>
+    <div class="pb-state"><b>${left < -0.5 ? `⚠️ Sfori di ${eur0(-left)}` : Math.abs(left) < 0.5 ? "✓ Tutto diviso" : `Restano ${eur0(left)}`}</b>
+      <small>${{ saving: "Salvo…", saved: "✓ Salvato", offline: "✓ Salvato sul telefono", error: "Non salvato" }[planSaved] || ""}</small></div>`;
 
   const month = budgetTarget?.label || "";
   const carryRow = !typedCarry() ? ""
@@ -1363,6 +1653,7 @@ $("plan-ladder").addEventListener("click", (e) => {
   vals[big] = Math.max(0, vals[big] + Math.max(0, spendable - vals.reduce((a, b) => a + b, 0)));
   rows.forEach((r, i) => { propEdits[r.category] = vals[i]; });
   renderProposal();
+  scheduleSave();
   const still = vals.reduce((a, b) => a + b, 0) - spendable;
   toast(still > 0.5 ? `Ho abbassato le variabili, ma le spese fisse superano ancora di ${eur0(still)}` : "✓ Categorie aggiustate: rientri in quello che puoi spendere");
 });
@@ -1371,11 +1662,21 @@ $("prop-list").addEventListener("input", (e) => {
   const inp = e.target.closest("input[data-i]"); if (!inp) return;
   propEdits[allRows()[+inp.dataset.i].category] = parseAmount(inp.value) || 0;
   updatePropTotal();
+  scheduleSave();
 });
-// finito di scrivere: le categorie non toccate si ridividono quello che resta
-$("prop-list").addEventListener("change", () => renderProposal());
-["inc-borsa", "inc-personale", "inc-famiglia", "inc-altro", "inc-riporto"].forEach((id) => $(id).addEventListener("input", () => renderProposal()));
+["inc-borsa", "inc-personale", "inc-famiglia", "inc-altro", "inc-riporto"].forEach((id) => $(id).addEventListener("input", () => { renderProposal(true); scheduleSave(); }));
 $("inc-riporto").addEventListener("input", rememberPlan);
+$("prop-use").addEventListener("click", () => {
+  const { vals } = proposedValues();
+  allRows().forEach((r, i) => { propEdits[r.category] = vals[i]; });
+  renderProposal();
+  scheduleSave();
+  toast("✓ Messa la proposta in tutte le categorie");
+});
+$("prop-copy").addEventListener("click", async () => {
+  await savePlan();  // prima salvo le ultime cifre, poi copio quelle
+  copyBudgetToMonths();
+});
 
 function addPlanCategory(name, value) {
   name = name.trim();
@@ -1384,32 +1685,44 @@ function addPlanCategory(name, value) {
   propExtra.push({ category: name, kind: "nuova", proposal: value || 0, avg: 0, months_over: 0 });
   propEdits[name] = value || 0;
   renderProposal();
+  scheduleSave();
 }
 $("prop-add-new").addEventListener("click", async () => {
   const res = await askNumber("Nuova categoria", "Scrivi il nome e quanto vuoi spendere al mese.", 0, true);
   if (res?.name) addPlanCategory(res.name, res.value);
 });
 
-$("apply-budget").addEventListener("click", async () => {
-  if (!proposalData) return;
+// Salvataggio automatico del piano: ogni cambio (cifre, entrate, surplus/deficit, "Usa la proposta", "Aggiusta")
+// si scrive nel file dopo un attimo; a Mac spento va nella coda delle modifiche e si vede già.
+let planSaved = "saved";  // saving | saved | offline | error
+function scheduleSave() {
+  planSaved = "saving";
+  updatePropTotal();
+  clearTimeout(scheduleSave.t);
+  scheduleSave.t = setTimeout(savePlan, 900);
+}
+async function savePlan() {
+  clearTimeout(scheduleSave.t);
+  if (!proposalData || planSaved !== "saving") return;
+  const target = budgetTarget;
   const budgets = {};
   const vals = typedBudgets();
-  const over = vals.reduce((a, b) => a + b, 0) - (typedBase() - saveEuro() + (useCarry ? typedCarry() : 0));
-  if (over > 0.5 && !planOverIgnored && !(await askConfirm(`Superi di ${eur0(over)}`,
-    "Le categorie sono più di quello che puoi spendere. Salvo lo stesso? (Annulla e tocca Aggiusta per farle rientrare.)", "Salva lo stesso"))) return;
   allRows().forEach((r, i) => { budgets[r.category] = vals[i]; });
   const income = incItems ? { items: incItems, riporto: useCarry ? typedCarry() : null }
     : { borsa: parseAmount($("inc-borsa").value) || 0, personale: parseAmount($("inc-personale").value) || 0,
       famiglia: parseAmount($("inc-famiglia").value) || 0, altro: parseAmount($("inc-altro").value) || 0, riporto: useCarry ? typedCarry() : null };
-  const following = $("apply-following").checked;
   try {
-    const r = await api("/api/budgets", { method: "PUT", body: { sheet: budgetTarget.sheet, date: budgetTarget.date, budgets, income, apply_following: following } });
-    toast(r.months > 1 ? `✓ Budget salvato in ${r.months} mesi (da ${r.sheet})` : `✓ Budget di ${r.sheet} salvato`);
-    budgetTarget = { ...budgetTarget, sheet: r.sheet };
+    const r = await api("/api/budgets", { method: "PUT", body: { sheet: target.sheet || null, date: target.date, budgets, income, full: true } });
+    if (target !== budgetTarget) { planSaved = "saved"; return; }  // nel frattempo hai cambiato mese
+    if (r.sheet && !target.sheet) budgetTarget = { ...target, sheet: r.sheet };  // mese appena creato
+    // le cifre salvate diventano quelle "del file": restano anche ricaricando
+    allRows().forEach((r, i) => { r.current = vals[i]; });
+    propExtra.forEach((r) => (r.kind = "variabile"));
+    planSaved = r.offline ? "offline" : "saved";
     refresh();
-    fetchProposal();
-  } catch (err) { toast(failMsg(err)); }
-});
+  } catch (err) { planSaved = "error"; toast(failMsg(err)); }
+  updatePropTotal();
+}
 
 // ================= RISPARMI =================
 
@@ -1891,10 +2204,20 @@ async function loadCatManage() {
     const q = budgetTarget?.sheet ? "?sheet=" + encodeURIComponent(budgetTarget.sheet) : "";
     const r = await api("/api/categories" + q);
     catManage = r.categories;
+    loadCatManage.income = r.income;
+    if (!profile.plan && !profile.quiz) { try { profile = await api("/api/profile"); } catch {} }
     $("cat-manage").innerHTML = catManage.map((c, i) => `<li><button type="button" class="pick" data-i="${i}">
       <span class="emoji">${emoji(c.category)}</span><span class="name">${esc(c.category)}</span>
       <span class="budget">${c.budget ? eur0(c.budget) : "—"}</span></button></li>`).join("");
     $("cat-add").hidden = r.free_slots <= 0;
+    const avail = spendableFor(budgetTarget?.sheet || budgetTarget?.label, r.income);
+    const sum = catManage.reduce((a, c) => a + (c.budget || 0), 0);
+    $("cat-avail").hidden = avail == null;
+    if (avail != null) {
+      $("cat-avail").className = "cat-avail" + (sum - avail > 0.5 ? " neg" : "");
+      $("cat-avail").textContent = sum - avail > 0.5 ? `⚠️ Puoi spendere ${eur0(avail)}, nelle categorie ci sono ${eur0(sum)}: sfori di ${eur0(sum - avail)}.`
+        : `Puoi spendere ${eur0(avail)} · nelle categorie ${eur0(sum)} · restano ${eur0(avail - sum)}.`;
+    }
   } catch (err) { $("cat-manage").innerHTML = `<li class="empty">${esc(failMsg(err))}</li>`; }
 }
 
@@ -1925,12 +2248,34 @@ $("cat-manage").addEventListener("click", async (e) => {
   refresh();
 });
 
+/** Quanto puoi spendere nel mese (come nel Piano): entrate (con surplus/deficit se contato) − quanto metti da parte. */
+function spendableFor(month, income) {
+  if (!income) return null;
+  const p = profile.plan?.[month];
+  const save = p?.fixed ?? Math.round((income.base || 0) * (p?.rate ?? profile.plan_rate ?? 10) / 100);
+  return (income.total ?? income.base ?? 0) - save;
+}
+
 function editCategory(c, month, others) {
   return new Promise((resolve) => {
     const dlg = $("catdlg");
     $("cd-title").textContent = c.category;
     $("cd-name").value = c.category;
     $("cd-budget").value = numIn(c.budget);
+    // riferimento mentre cambi il budget: disponibile, quanto hanno le altre e se con questa cifra sfori
+    const avail = spendableFor(month, loadCatManage.income);
+    const rest = catManage.filter((x) => x.category !== c.category).reduce((a, x) => a + (x.budget || 0), 0);
+    const showAvail = () => {
+      if (avail == null) { $("cd-avail").textContent = ""; return; }
+      const v = parseAmount($("cd-budget").value) || 0;
+      const over = rest + v - avail;
+      $("cd-avail").classList.toggle("neg", over > 0.5);
+      $("cd-avail").textContent = over > 0.5
+        ? `⚠️ Con ${eur0(v)} sfori di ${eur0(over)}: puoi spendere ${eur0(avail)} e le altre categorie hanno già ${eur0(rest)}.`
+        : `Puoi spendere ${eur0(avail)} · le altre categorie hanno ${eur0(rest)} · per questa restano ${eur0(Math.max(0, avail - rest))}.`;
+    };
+    $("cd-budget").oninput = showAvail;
+    showAvail();
     $("cd-month").textContent = month ? `(${month})` : "";
     $("cd-delete-box").hidden = true;
     $("cd-move").innerHTML = `<option value="">— scegli —</option>` + others.map((o) => `<option>${esc(o)}</option>`).join("");
@@ -2171,7 +2516,7 @@ $("trip-delete").addEventListener("click", async () => {
 
 window.addEventListener("online", () => { flushQueue(); refresh(); });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) return;
+  if (document.hidden) return savePlan();  // chiudi l'app mentre scrivi: salvo subito
   flushQueue();
   setTimeout(warmOffline, 3000);
   // rientrando nell'app (es. dopo una modifica in Excel) ricarico quello che stai guardando
@@ -2184,7 +2529,7 @@ setInterval(flushQueue, 30000);
 
 enableSwipe($("home-recent"), (li) => {
   const t = homeRows[+li.dataset.i];
-  return t && !t.queued && !(t.trip && t.sheet) ? { t, after: refresh } : null;
+  return t && !(t.trip && t.sheet && !t.queued) ? { t, after: refresh } : null;
 });
 enableSwipe($("month-list"), (li) => {
   const t = monthFlat[+li.dataset.i];

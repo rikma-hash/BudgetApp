@@ -423,16 +423,13 @@ def _write(ws, r, day, description, amount, cat, note):
     ws.cell(r, 5).value = note or None
 
 
-def _check(ws, row, expect):
-    desc, amt = ws.cell(row, 2).value, ws.cell(row, 3).value
-    if str(desc or "").strip() != str(expect.get("description", "")).strip() or \
-            not isinstance(amt, (int, float)) or abs(float(amt) - float(expect.get("amount", -1))) > 0.005:
-        raise X.RowChanged(f"{ws.title}!{row}")
+def _check(ws, row, expect) -> int:
+    return X.find_row(ws, row, expect, TX_FIRST, TX_LAST, 2, 3)
 
 
 def edit_expense(wb, name, row, expect, day, description, amount, category, note) -> dict:
     ws = get(wb, name)
-    _check(ws, row, expect)
+    row = _check(ws, row, expect)
     known = [c for c, _ in categories(ws)]
     cat = X.canonical(category, known) or add_category(wb, ws, category)
     old = ws.cell(row, 1).value
@@ -444,7 +441,7 @@ def edit_expense(wb, name, row, expect, day, description, amount, category, note
 
 def delete_expense(wb, name, row, expect) -> None:
     ws = get(wb, name)
-    _check(ws, row, expect)
+    row = _check(ws, row, expect)
     last = max((t["row"] for t in transactions(ws)), default=row)
     for r in range(row, last):
         for col in range(1, 6):

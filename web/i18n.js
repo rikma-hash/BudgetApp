@@ -20,6 +20,11 @@ const EXACT = {
   "Risparmi": "Savings", "Home": "Home", "Viaggi": "Trips", "‹ Storico": "‹ History", "‹ Home": "‹ Home", "‹ Viaggi": "‹ Trips",
   "Caricamento…": "Loading…", "Carico…": "Loading…",
   // piano: colonne, totali, allarme · viaggi: copia budget · rate
+  "Il tuo": "Yours", "Il tuo budget (somma)": "Your budget (total)", "✓ Tutto diviso": "✓ All assigned", "Disponibile": "Available",
+  "Nelle categorie": "In categories", "Salvo…": "Saving…", "✓ Salvato": "✓ Saved", "✓ Salvato sul telefono": "✓ Saved on the phone", "Non salvato": "Not saved",
+  "✨ Usa la proposta per tutte": "✨ Use the proposal for all", "✓ Messa la proposta in tutte le categorie": "✓ Proposal applied to all categories",
+  "Scrivi il tuo budget: si salva da solo. Accanto c'è la cifra che ti propongo in base a quanto spendi di solito.":
+    "Write your budget: it saves by itself. Next to it is the amount I suggest based on what you usually spend.",
   "📋 Copia il budget del mese in altri mesi": "📋 Copy this month's budget to other months", "📋 Copia questo budget in altri mesi": "📋 Copy this budget to other months",
   "Seleziona tutti": "Select all", "Togli tutti": "Clear all", "Questo mese non esiste ancora: salva prima il suo budget nel Piano.": "This month doesn't exist yet: save its budget in the Plan first.",
   "Aggiornamenti": "Updates", "Automatici": "Automatic", "Spenti": "Off", "Controlla ora": "Check now",
@@ -52,7 +57,7 @@ const EXACT = {
   "Senza affitto": "Without rent", "Senza viaggi": "Without trips",
   "Il Mac non è raggiungibile": "The Mac can't be reached",
   "Il Mac non è raggiungibile: le nuove spese restano sul telefono e partono dopo.": "The Mac can't be reached: new expenses stay on the phone and are sent later.",
-  "Il Mac non è raggiungibile: le nuove spese restano sul telefono e partono dopo. Se il Mac è acceso, controlla che Tailscale sia attivo sul telefono.": "The Mac can't be reached: new expenses stay on the phone and are sent later. If the Mac is on, check that Tailscale is active on the phone.",
+  "Il Mac non è raggiungibile: spese e modifiche restano sul telefono e partono dopo. Se il Mac è acceso, controlla che Tailscale sia attivo sul telefono.": "The Mac can't be reached: expenses and changes stay on the phone and are sent later. If the Mac is on, check that Tailscale is active on the phone.",
   "Il file è aperto in Excel sul Mac: le spese verranno scritte quando lo chiudi.": "The file is open in Excel on the Mac: expenses will be written when you close it.",
   "Il file Excel sembra tornato a una versione vecchia (manca il foglio _Modello). Di solito succede quando Excel salva una copia rimasta aperta: chiudi Excel e chiedi di ripristinarlo.":
     "The Excel file seems to be back to an old version (the _Modello sheet is missing). This usually happens when Excel saves a copy left open: close Excel and ask to restore it.",
@@ -201,6 +206,18 @@ const EXACT = {
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
   [/^Superi di (.+)$/, "Over by $1"],
+  [/^Da dividere (.+)$/, "To assign $1"], [/^⚠️ Sfori di (.+)$/, "⚠️ Over by $1"], [/^Sfori di (.+)$/, "Over by $1"], [/^Restano (.+)$/, "$1 left"],
+  [/^📋 Copia il budget di (.+) nei mesi dopo$/, "📋 Copy the $1 budget to the following months"],
+  [/^Ti restano (.+) di (.+)$/, "$1 left of $2"], [/^Hai superato il budget di (.+) \((.+)\)$/, "Over budget by $1 ($2)"],
+  [/^(\d+) (modifica fatta|modifiche fatte) a Mac spento: (parte|partono) appena il Mac risponde$/, (m, n) => `${n} ${n === "1" ? "change" : "changes"} made with the Mac off: sent as soon as the Mac answers`],
+  [/^(\d+) (modifica fatta|modifiche fatte) a Mac spento (inviata|inviate)$/, (m, n) => `${n} ${n === "1" ? "change" : "changes"} made with the Mac off sent`],
+  [/^Una modifica fatta a Mac spento non è andata: (.+)$/, "A change made with the Mac off didn't go through: $1"],
+  [/^(.+) · sul telefono, arriva al Mac appena si accende$/, (m, a) => `${tr(a)} · on the phone, it reaches the Mac when it's on`],
+  [/^Puoi spendere (.+) · nelle categorie (.+) · restano (.+)\.$/, "You can spend $1 · in categories $2 · $3 left."],
+  [/^⚠️ Puoi spendere (.+), nelle categorie ci sono (.+): sfori di (.+)\.$/, "⚠️ You can spend $1, categories have $2: over by $3."],
+  [/^Puoi spendere (.+) · le altre categorie hanno (.+) · per questa restano (.+)\.$/, "You can spend $1 · other categories have $2 · $3 left for this one."],
+  [/^⚠️ Con (.+) sfori di (.+): puoi spendere (.+) e le altre categorie hanno già (.+)\.$/, "⚠️ With $1 you're over by $2: you can spend $3 and the other categories already have $4."],
+  [/^(.+) tolta$/, "$1 removed"],
   [/^Copia il budget di (.+)$/, "Copy the budget of $1"], [/^Copia in (\d+) (mese|mesi)$/, (m, n) => `Copy to ${n} ${n === "1" ? "month" : "months"}`],
   [/^Non ci sono mesi dopo (.+)$/, "There are no months after $1"],
   [/^Il budget di tutte le categorie di (.+) va nei mesi che scegli\. Entrate e surplus\/deficit restano come sono\.$/, "The budget of every category in $1 goes to the months you choose. Income and surplus/deficit stay as they are."],
@@ -268,7 +285,7 @@ const PATTERNS = [
   [/^✓ (.+): (.+) a (.+)\. Controlla il Piano per il totale\.$/, "✓ $1: $2 for $3. Check the Plan for the total."],
   [/^Leggo (.+)…$/, "Reading $1…"], [/^(.+) · giorno (\d+)( · a mano)?( · ✓ inserito)?( · arriva il (\d+))?$/, (m, eu, d, man, ok, a, d2) => `${eu} · day ${d}${man ? " · manual" : ""}${ok ? " · ✓ added" : ""}${a ? ` · due on the ${d2}` : ""}`],
   [/^✓ Inseriti (\d+) abbonamenti: (.+)$/, "✓ Added $1 subscriptions: $2"], [/^✓ Inserito (.+)$/, "✓ Added $1"], [/^usato il (\d+)% · restano (.+)$/, "$1% used · $2 left"], [/^Versione (.+)$/, "Version $1"], [/^File salvati nel telefono \((\d+)\)$/, "Files saved on the phone ($1)"], [/^Dati salvati \((\d+) pagine\)$/, "Data saved ($1 pages)"],
-  [/^Stai vedendo i dati del (.+): si possono solo guardare\.$/, "You're seeing the data from $1: view only."],
+  [/^Stai vedendo i dati del (.+): quello che cambi parte appena il Mac risponde\.$/, "You're seeing the data from $1: what you change is sent as soon as the Mac answers."],
   [/^(\d+) (?:spesa sembra già registrata|spese sembrano già registrate) \(stessa cifra, data vicina\): (?:l'ho lasciata|le ho lasciate) fuori\.$/,
     (m, n) => `${n} ${n === "1" ? "expense seems" : "expenses seem"} already recorded (same amount, nearby date): left out.`],
   [/^(\d+) (?:spesa è di un mese|spese sono di mesi) che non posso modificare\.$/, (m, n) => `${n} ${n === "1" ? "expense is from a month" : "expenses are from months"} I can't change.`],

@@ -124,3 +124,9 @@
 
 ## 2026-11-04 · Copia del budget in altri mesi (app dell'utente + GitHub)
 - Budget › Categorie: copia del budget di tutto il mese o di una categoria nei mesi dopo, scelti con caselle (vedi 03). Provato su copia del file vero a 390 px: Novembre → Dicembre+Gennaio (tutte), Svago → Febbraio (solo quella, il resto invariato). Web v40.
+
+## 2026-11-05 · Mac spento, Piano automatico, disponibile, Home (app dell'utente + GitHub)
+- **Modifiche a Mac spento di tutto** (coda `ops` + copie corrette subito, `find_row` nel server per le righe spostate); **letture subito dalla copia** a Mac spento. Provato spegnendo davvero il server di prova: budget, modifica ed eliminazione spesa, rinomina categoria, budget viaggio → visibili anche riaprendo l'app, Storico/Budget in ~0,15 s; riacceso il server → tutto arrivato nel file, coda vuota.
+- **Piano**: salvataggio automatico (niente più "Usa questo budget"), colonne Proposto | Il tuo, "Usa la proposta per tutte", "Copia nei mesi dopo", **barra fissa** con disponibile e "Sfori di X" mentre scrivi. Categorie: disponibile in cima e nella finestra della categoria.
+- **Home**: in grande quanto hai speso, sotto "Ti restano X di <budget totale>".
+- Provato su copia del file vero e sul modello vuoto a 390 px. Web v43.
