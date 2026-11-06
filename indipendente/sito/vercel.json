@@ -1,3 +1,0 @@
-{
-  "headers": [{ "source": "/(sw.js|index.html)?", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }]
-}

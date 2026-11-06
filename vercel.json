@@ -1,6 +1,12 @@
 {
   "builds": [{ "src": "indipendente/sito/**", "use": "@vercel/static" }],
   "routes": [
+    { "src": "/(.*)", "continue": true, "headers": {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+    } },
     { "src": "^/$", "dest": "/indipendente/sito/index.html", "headers": { "Cache-Control": "no-store" } },
     { "src": "^/sw\\.js$", "dest": "/indipendente/sito/sw.js", "headers": { "Cache-Control": "no-store" } },
     { "src": "^/(.*)$", "dest": "/indipendente/sito/$1" }

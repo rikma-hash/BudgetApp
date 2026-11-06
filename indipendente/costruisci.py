@@ -131,7 +131,6 @@ def main() -> None:
     sw, n = re.subn(r"const SHELL = \[[^\]]*\];", "const SHELL = " + str(shell).replace("'", '"') + ";", sw)
     need(n == 1, "const SHELL in sw.js")
     (OUT / "sw.js").write_text(sw)
-    (OUT / "vercel.json").write_text('{\n  "headers": [{ "source": "/(sw.js|index.html)?", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }]\n}\n')
     print(f"✓ sito/ pronto (app v{web_v}, versione {stamp})")
 
 

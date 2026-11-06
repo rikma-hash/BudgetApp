@@ -92,7 +92,8 @@ const Store = {
 
   afterAuth(user) {
     const prev = lsGet("indip-user", null);
-    if (prev && prev.id !== user.id) { localStorage.removeItem(K_DB); localStorage.removeItem(K_SNAP); localStorage.removeItem(K_OUT); }
+    // un altro account su questo dispositivo: via tutto quello che apparteneva al precedente
+    if (prev && prev.id !== user.id) clearAccountData();
     this.mode = "cloud"; this.user = { id: user.id, email: user.email };
     lsSet(K_MODE, "cloud"); lsSet("indip-user", this.user);
     this.db = lsGet(K_DB, emptyDb()); this.snap = lsGet(K_SNAP, {}); this.outbox = lsGet(K_OUT, []);
@@ -101,9 +102,8 @@ const Store = {
 
   async signOut() {
     if (this.mode === "cloud") await this.client.auth.signOut().catch(() => {});
-    for (const k of [K_MODE, K_DB, K_SNAP, K_OUT, "indip-user"]) localStorage.removeItem(k);
-    // le copie salvate dall'app (api:…, coda) appartengono all'account: via anche quelle
-    Object.keys(localStorage).filter((k) => k.startsWith("api:") || ["api-index", "queue", "ops"].includes(k)).forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem(K_MODE);
+    clearAccountData();
     this.mode = null; this.user = null; this.db = emptyDb(); this.snap = {}; this.outbox = [];
   },
 
@@ -247,6 +247,12 @@ const Store = {
     this.commit();
   },
 };
+
+/** Toglie dal dispositivo i dati dell'account: copia del database, coda, utente e le copie salvate dall'app (api:…). */
+function clearAccountData() {
+  for (const k of [K_DB, K_SNAP, K_OUT, "indip-user", "api-index", "queue", "ops"]) localStorage.removeItem(k);
+  Object.keys(localStorage).filter((k) => k.startsWith("api:")).forEach((k) => localStorage.removeItem(k));
+}
 
 function authMsg(err) {
   const m = String(err.message || err);
