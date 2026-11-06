@@ -11,6 +11,7 @@ Tutto quello che serve per capire, usare e mantenere la mini-app delle spese sen
 | [04-decisioni-e-preferenze.md](04-decisioni-e-preferenze.md) | Cosa vuole l'utente, scelte fatte e perché |
 | [05-problemi-noti.md](05-problemi-noti.md) | Incidenti passati, trappole di iPhone/Excel/iCloud e come evitarle |
 | [06-manutenzione.md](06-manutenzione.md) | Comandi: riavvio, log, test su copia, script, ripristino da backup |
+| [07-indipendente.md](07-indipendente.md) | Prova della versione senza Mac (Supabase), solo nel ramo `prova-supabase` |
 | [registro.md](registro.md) | Cronologia delle modifiche, con date |
 | `privato.md` | 🔒 **Solo su questo Mac** (non su GitHub): dati dell'utente e valori dei `<segnaposto>`. Leggilo se esiste |
 

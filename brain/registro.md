@@ -138,3 +138,8 @@
 - **Parole chiave** (`server/keywords.json`): da 164 a 680 (supermercati, negozi, app di consegna, trasporti e abbonamenti di Italia, Germania, Olanda e altri). Tolte parole ambigue (es. "dott", "bonifico", "amazon").
 - **Piano**: riquadro **🏦 Soldi sul conto** separato da "Budget di <mese>"; `GET /api/balance` (stima = importo − spese registrate dopo).
 - Versione cache 43 → 44. Provato su copia (`test/rete`) a 390 px, chiaro e scuro; server vero riavviato.
+
+## 2026-11-06 · Prova della versione indipendente (Supabase) — ramo `prova-supabase`
+- Dopo l'analisi del feedback esterno l'utente ha scelto di provare l'app **senza Mac**: sito statico in `indipendente/` + database Supabase (oppure dati solo nel browser).
+- Fatto: accesso (email+password o "senza account"), Home, Storico per mese con filtro, Budget per mese con entrate e salvataggio automatico, categorie (nuova/rinomina/elimina), aggiungi/modifica/elimina spesa con suggerimento (storico + parole chiave), **Importa dal vecchio Excel**, **Scarica Excel**.
+- Provato in modalità senza account a 390 px (chiaro/scuro) con la copia del file: totali uguali al Riassunto. **Supabase non ancora provato**: l'utente deve creare il progetto (passi in `indipendente/LEGGIMI.md`).
