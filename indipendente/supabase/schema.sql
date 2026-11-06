@@ -37,6 +37,12 @@ create table if not exists public.expenses (
 );
 create index if not exists expenses_user_date on public.expenses (user_id, date);
 
+-- Solo chi ha fatto l'accesso può usare le tabelle (serve se "Automatically expose new tables" è spento).
+-- Chi non ha fatto l'accesso (ruolo anon) non ha nessun permesso.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.categories, public.months, public.budgets, public.expenses to authenticated;
+revoke all on public.categories, public.months, public.budgets, public.expenses from anon;
+
 alter table public.categories enable row level security;
 alter table public.months     enable row level security;
 alter table public.budgets    enable row level security;
