@@ -580,6 +580,22 @@ def put_profile(body: dict):
     return {"status": "ok"}
 
 
+@app.get("/api/balance")
+def balance():
+    """Soldi sul conto (scritti dall'utente in profile.balance = {amount, date}) meno le spese registrate dopo
+    quel giorno fino a oggi (mesi + viaggi; le righe "✈️ Viaggio" dei mesi no, sono già contate nei viaggi).
+    Le entrate arrivate dopo non si conoscono: per questo è una stima e si aggiorna a mano."""
+    b = _read_json(PROFILE, {}).get("balance") or {}
+    if not isinstance(b.get("amount"), (int, float)) or not b.get("date"):
+        return {"amount": None}
+    since, today = b["date"], dt.date.today().isoformat()
+    with lock:
+        wb = workbook()
+        txs = [t for t in X.history(wb) if not t["trip"]] + [t for ws in T.trip_sheets(wb) for t in T.transactions(ws)]
+    spent = round(sum(t["amount"] for t in txs if t["date"] and since < t["date"] <= today), 2)
+    return {"amount": b["amount"], "date": since, "spent_since": spent, "estimate": round(b["amount"] - spent, 2)}
+
+
 # ---------- risparmi ----------
 
 @app.get("/api/insights")
@@ -781,6 +797,18 @@ class TripCategory(BaseModel):
 def trip_category(body: TripCategory):
     name = write(lambda wb: T.add_category(wb, T.get(wb, body.trip), body.name, body.budget))
     return {"status": "ok", "name": name}
+
+
+class TripCategoryDelete(BaseModel):
+    trip: str
+    name: str = Field(min_length=1)
+    move_to: str | None = None
+
+
+@app.post("/api/trips/delete-category")
+def trip_delete_category(body: TripCategoryDelete):
+    n = write(lambda wb: T.delete_category(T.get(wb, body.trip), body.name, body.move_to))
+    return {"status": "ok", "moved": n}
 
 
 class TripCopy(BaseModel):

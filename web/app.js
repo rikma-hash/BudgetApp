@@ -303,7 +303,10 @@ function patchOffline({ path, body: b }) {
     }
     else if (path === "/api/expenses/edit") patchExpense(b.sheet, b.row, b.expect, { description: b.description, amount: b.amount, category: b.category, note: b.note, ...(b.date ? { date: b.date } : {}) });
     else if (path === "/api/expenses/delete") patchExpense(b.sheet, b.row, b.expect, null);
-    else if (path === "/api/profile") offEdit(K.profile, (v) => Object.assign(v, b));
+    else if (path === "/api/profile") {
+      offEdit(K.profile, (v) => Object.assign(v, b));
+      if ("balance" in b) offEdit(offKey("/api/balance"), (v) => { for (const k of Object.keys(v)) delete v[k]; Object.assign(v, b.balance ? { ...b.balance, spent_since: 0, estimate: b.balance.amount } : { amount: null }); });
+    }
     else if (path === "/api/subscriptions") offEdit(K.subs(b.sheet), (v) => { v.items = b.items.map((i, k) => ({ ...(v.items[k] || {}), ...i, label: i.name })); });
     else if (path === "/api/categories/rename") offAll().forEach((k) => offEdit(k, (v) => renameDeep(v, b.old, b.new)));
     else if (path === "/api/categories/add") {
@@ -326,6 +329,15 @@ function patchOffline({ path, body: b }) {
     }));
     else if (path === "/api/trips/budget") offEdit(K.trip(b.trip), (v) => { const c = v.summary.categories.find((x) => lc(x.category) === lc(b.category)); if (c) c.budget = +b.budget || 0; tripTotals(v); });
     else if (path === "/api/trips/category") offEdit(K.trip(b.trip), (v) => { if (v.categories.some((c) => lc(c) === lc(b.name))) return; v.summary.categories.push({ category: b.name, budget: +b.budget || 0, total: 0, left: 0 }); v.categories.push(b.name); v.free_slots--; tripTotals(v); });
+    else if (path === "/api/trips/delete-category") offEdit(K.trip(b.trip), (v) => {
+      v.summary.categories = v.summary.categories.filter((c) => !c.virtual && lc(c.category) !== lc(b.name));
+      v.categories = v.categories.filter((c) => lc(c) !== lc(b.name));
+      v.free_slots++;
+      if (b.move_to) v.transactions.forEach((t) => { if (lc(t.category) === lc(b.name)) t.category = b.move_to; });
+      tripTotals(v);
+      const other = r2(v.transactions.filter((t) => !v.categories.some((c) => lc(c) === lc(t.category))).reduce((a, t) => a + t.amount, 0));
+      if (other) v.summary.categories.push({ category: "Senza categoria", budget: 0, total: other, left: -other, virtual: true });
+    });
     else if (path === "/api/trips/copy-budget") {
       const src = store.get(K.trip(b.source), null)?.v.summary.categories.filter((c) => !c.virtual) || [];
       offEdit(K.trip(b.trip), (v) => {
@@ -1237,37 +1249,68 @@ $("cat-pills").addEventListener("click", (e) => {
 async function loadYear() {
   try {
     const y = await api("/api/year");
-    const t = y.total;
-    $("year-stats").innerHTML = `<div><span>Budget</span><b>${eur0(t.budget)}</b></div>
-      <div><span>Speso</span><b>${eur0(t.spent)}</b></div>
-      <div><span>${t.surplus >= 0 ? "Surplus" : "Deficit"}</span><b class="${sign(t.surplus)}">${eur(t.surplus)}</b></div>`;
-    const past = y.months.filter((m) => !m.future).reverse();
-    const next = y.months.filter((m) => m.future);
-    const ordered = [...past, ...(next.length ? [{ heading: "Prossimi mesi" }] : []), ...next];
-    $("year-list").innerHTML = ordered.map((m) => {
-      if (m.heading) return `<div class="group-head"><span>${m.heading}</span></div>`;
-      const now = m.current;
-      if (m.future) {
-        return `<div class="month-card future" data-sheet="${esc(m.sheet || "")}">
-          <div class="top"><b>${esc(m.month)}</b><span class="badge none">da iniziare</span></div>
-          <div class="meta">Budget ${m.budget ? eur0(m.budget) : "non ancora impostato"}</div></div>`;
-      }
-      const pct = m.budget > 0 ? Math.min(100, (m.spent / m.budget) * 100) : 100;
-      const badge = m.budget > 0
-        ? `<span class="badge ${sign(m.surplus)}">${m.surplus >= 0 ? "+" : "−"}${eur(Math.abs(m.surplus))}</span>`
-        : `<span class="badge none">senza budget</span>`;
-      const saved = now ? `finora restano ${eur(m.saved)}` : `${m.saved >= 0 ? "risparmiati" : "in rosso di"} ${eur(Math.abs(m.saved))}`;
-      return `<div class="month-card" data-sheet="${esc(m.sheet || "")}">
-        <div class="top"><b>${esc(m.month)}${now ? " <span class='hint'>· in corso</span>" : ""}</b>${badge}</div>
-        <div class="progress"><i class="${!m.budget ? "none" : m.spent > m.budget ? "over" : ""}" style="width:${pct}%"></i></div>
-        <div class="meta">Speso ${eur(m.spent)} su budget ${m.budget ? eur0(m.budget) : "non impostato"}</div>
-        <div class="meta">Entrate ${eur0(m.income)} · ${saved}</div>
-      </div>`;
-    }).join("");
+    loadYear.data = y;
+    if (!profile.hidden_months) { try { profile = { ...profile, ...(await api("/api/profile")) }; } catch {} }
+    renderYear();
   } catch (err) { $("year-list").innerHTML = `<p class="empty">${esc(failMsg(err))}</p>`; }
 }
 
+// Mesi nascosti con l'occhio (profile.hidden_months, uguali su tutti i dispositivi): restano in elenco
+// più chiari ma non entrano in Budget/Speso/Surplus in alto. Contano solo i mesi già iniziati, come prima.
+function renderYear() {
+  const y = loadYear.data; if (!y) return;
+  const hidden = new Set(profile.hidden_months || []);
+  const key = (m) => m.sheet || m.month;
+  const counted = y.months.filter((m) => !m.future && !hidden.has(key(m)));
+  const t = Object.fromEntries(["budget", "spent", "surplus"].map((k) => [k, r2(counted.reduce((a, m) => a + (m[k] || 0), 0))]));
+  const off = y.months.filter((m) => !m.future && hidden.has(key(m))).map((m) => m.month);
+  $("year-stats").innerHTML = `<div><span>Budget</span><b>${eur0(t.budget)}</b></div>
+    <div><span>Speso</span><b>${eur0(t.spent)}</b></div>
+    <div><span>${t.surplus >= 0 ? "Surplus" : "Deficit"}</span><b class="${sign(t.surplus)}">${eur(t.surplus)}</b></div>`;
+  $("year-off").hidden = !off.length;
+  $("year-off").textContent = off.length ? `Senza ${off.join(", ")} · tocca l'occhio per rimetterl${off.length === 1 ? "o" : "i"}` : "";
+  const past = y.months.filter((m) => !m.future).reverse();
+  const next = y.months.filter((m) => m.future);
+  const ordered = [...past, ...(next.length ? [{ heading: "Prossimi mesi" }] : []), ...next];
+  $("year-list").innerHTML = ordered.map((m) => {
+    if (m.heading) return `<div class="group-head"><span>${m.heading}</span></div>`;
+    const now = m.current;
+    if (m.future) {
+      return `<div class="month-card future" data-sheet="${esc(m.sheet || "")}">
+        <div class="top"><b>${esc(m.month)}</b><span class="badge none">da iniziare</span></div>
+        <div class="meta">Budget ${m.budget ? eur0(m.budget) : "non ancora impostato"}</div></div>`;
+    }
+    const isOff = hidden.has(key(m));
+    const pct = m.budget > 0 ? Math.min(100, (m.spent / m.budget) * 100) : 100;
+    const badge = m.budget > 0
+      ? `<span class="badge ${sign(m.surplus)}">${m.surplus >= 0 ? "+" : "−"}${eur(Math.abs(m.surplus))}</span>`
+      : `<span class="badge none">senza budget</span>`;
+    const eye = `<button type="button" class="eye-btn" data-eye="${esc(key(m))}" aria-pressed="${isOff}"
+      aria-label="${isOff ? "Conta di nuovo questo mese nei totali" : "Non contare questo mese nei totali"}">${isOff ? EYE_OFF : EYE_ON}</button>`;
+    const saved = now ? `finora restano ${eur(m.saved)}` : `${m.saved >= 0 ? "risparmiati" : "in rosso di"} ${eur(Math.abs(m.saved))}`;
+    return `<div class="month-card${isOff ? " is-off" : ""}" data-sheet="${esc(m.sheet || "")}">
+      <div class="top"><b>${esc(m.month)}${now ? " <span class='hint'>· in corso</span>" : ""}</b><span class="top-right">${badge}${eye}</span></div>
+      <div class="progress"><i class="${!m.budget ? "none" : m.spent > m.budget ? "over" : ""}" style="width:${pct}%"></i></div>
+      <div class="meta">Speso ${eur(m.spent)} su budget ${m.budget ? eur0(m.budget) : "non impostato"}</div>
+      <div class="meta">Entrate ${eur0(m.income)} · ${saved}${isOff ? " · <b>non contato nei totali</b>" : ""}</div>
+    </div>`;
+  }).join("");
+}
+
+const EYE_ON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>`;
+
 $("year-list").addEventListener("click", (e) => {
+  const eye = e.target.closest("button[data-eye]");
+  if (eye) {
+    const k = eye.dataset.eye;
+    const set = new Set(profile.hidden_months || []);
+    set.has(k) ? set.delete(k) : set.add(k);
+    profile.hidden_months = [...set];
+    renderYear();
+    api("/api/profile", { method: "PUT", body: { hidden_months: profile.hidden_months } }).catch((err) => toast(failMsg(err)));
+    return;
+  }
   const c = e.target.closest(".month-card[data-sheet]"); if (!c || !c.dataset.sheet) return;
   loadHistory({ month: c.dataset.sheet });
 });
@@ -1390,9 +1433,58 @@ async function loadBudget() {
     try { profile = await api("/api/profile"); } catch { profile = {}; }
     if (profile.quiz?.obiettivo != null && saveFixed == null && !loadBudget.saveSet) setSave(QUIZ[4].opts[profile.quiz.obiettivo][2], null);
     renderQuiz();
+    loadBalance();
     await fetchProposal();
   } catch (err) { $("prop-notes").innerHTML = `<li>${esc(failMsg(err))}</li>`; }
 }
+
+// ---------- Soldi sul conto (separati dal budget del mese) ----------
+// L'utente scrive quanto ha sul conto (profile.balance = {amount, date}); il server toglie le spese registrate dopo.
+let balanceData = null;
+async function loadBalance() {
+  try { balanceData = await api("/api/balance"); } catch { balanceData = null; }
+  renderBalance(renderBalance.month, renderBalance.budget);
+}
+
+function renderBalance(month, budget) {
+  renderBalance.month = month; renderBalance.budget = budget;
+  const el = $("plan-balance");
+  if (!balanceData) { el.hidden = true; return; }
+  el.hidden = false;
+  const b = balanceData;
+  const bud = `<div><small>Budget di ${esc(month || "questo mese")}</small><b>${eur0(budget || 0)}</b></div>`;
+  if (b.amount == null) {
+    el.className = "card bal-card";
+    el.innerHTML = `<div><small>🏦 Soldi sul conto</small><b class="hint">＋ Aggiungi</b></div>${bud}
+      <p class="bal-note">Il conto è tutto quello che hai; il budget è quanto decidi di spendere nel mese. Tocca per scrivere quanto hai.</p>`;
+    return;
+  }
+  el.className = "card bal-card";
+  const since = b.spent_since ? ` · da allora spese per ${eur(b.spent_since)}` : "";
+  el.innerHTML = `<div><small>🏦 Soldi sul conto</small><b class="${b.estimate < 0 ? "neg" : ""}">${eur0(b.estimate)}</b></div>${bud}
+    <p class="bal-note">Aggiornato: ${esc(fmtDay(b.date))} · ${eur0(b.amount)}${since}. Le entrate nuove non le vedo: tocca per aggiornare.</p>`;
+}
+
+$("plan-balance").addEventListener("click", async () => {
+  const dlg = $("baldlg");
+  $("bal-value").value = balanceData?.estimate != null ? numIn(balanceData.estimate) : "";
+  $("bal-clear").hidden = balanceData?.amount == null;
+  $("bal-clear").onclick = () => dlg.close("clear");
+  dlg.returnValue = "";
+  dlg.showModal();
+  await new Promise((r) => (dlg.onclose = r));
+  let balance;
+  if (dlg.returnValue === "clear") balance = null;
+  else if (dlg.returnValue === "ok") {
+    const v = parseAmount($("bal-value").value);
+    if (v == null || isNaN(v)) return toast("Scrivi un importo");
+    balance = { amount: v, date: today() };
+  } else return;
+  profile.balance = balance;
+  balanceData = balance ? { ...balance, spent_since: 0, estimate: balance.amount } : { amount: null };
+  renderBalance(renderBalance.month, renderBalance.budget);
+  try { await api("/api/profile", { method: "PUT", body: { balance } }); loadBalance(); } catch (err) { toast(failMsg(err)); }
+});
 
 $("budget-pills").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-i]"); if (!b) return;
@@ -1614,6 +1706,7 @@ function updatePropTotal() {
       <small>${{ saving: "Salvo…", saved: "✓ Salvato", offline: "✓ Salvato sul telefono", error: "Non salvato" }[planSaved] || ""}</small></div>`;
 
   const month = budgetTarget?.label || "";
+  renderBalance(month, assigned);
   const carryRow = !typedCarry() ? ""
     : `<li><span>${typedCarry() < 0 ? "Deficit mesi scorsi" : "Surplus mesi scorsi"}</span>
        <b class="${useCarry ? sign(typedCarry()) : "off"}">${useCarry ? (typedCarry() < 0 ? "−" : "+") + eur0(Math.abs(typedCarry())) : "non contato"}</b></li>`;
@@ -2463,14 +2556,56 @@ $("trip-cats").addEventListener("click", async (e) => {
   const li = e.target.closest("li[data-cat]"); if (!li) return;
   const c = tripData.summary.categories.find((x) => x.category === li.dataset.cat);
   if (!c || c.virtual) return;
-  const res = await askNumber(`Budget · ${c.category}`, `Quanto vuoi spendere per ${c.category.toLowerCase()} in questo viaggio?`, c.budget);
+  const res = await editTripCategory(c);
   if (!res) return;
   try {
-    await api("/api/trips/budget", { method: "PUT", body: { trip: currentTrip, category: c.category, budget: res.value } });
+    if (res.action === "delete") {
+      const r = await api("/api/trips/delete-category", { method: "POST", body: { trip: currentTrip, name: c.category, move_to: res.moveTo || null } });
+      toast(`Categoria eliminata${r?.moved ? ` · ${r.moved} spese spostate in ${res.moveTo}` : ""}`);
+    } else {
+      if (res.budget === c.budget) return;
+      await api("/api/trips/budget", { method: "PUT", body: { trip: currentTrip, category: c.category, budget: res.budget } });
+    }
     showTrip(currentTrip);
     loadTripsCache();
   } catch (err) { toast(failMsg(err)); }
 });
+
+// Finestra di una categoria del viaggio: cambia il budget oppure elimina (le spese si spostano in un'altra categoria).
+function editTripCategory(c) {
+  return new Promise((resolve) => {
+    const dlg = $("tcdlg");
+    const others = tripData.categories.filter((x) => lc(x) !== lc(c.category));
+    const n = tripData.transactions.filter((t) => lc(t.category) === lc(c.category)).length;
+    $("tc-title").textContent = c.category;
+    $("tc-text").textContent = `Quanto vuoi spendere per ${c.category.toLowerCase()} in questo viaggio?`;
+    $("tc-budget").value = numIn(c.budget);
+    $("tc-delete-box").hidden = true;
+    $("tc-move").innerHTML = `<option value="">— lasciale senza categoria —</option>` + others.map((o) => `<option>${esc(o)}</option>`).join("");
+    $("tc-delete").textContent = "Elimina";
+    let deleting = false;
+    $("tc-delete").onclick = (ev) => {
+      ev.preventDefault();
+      if (!deleting) {
+        deleting = true;
+        $("tc-delete-box").hidden = false;
+        $("tc-move").closest("label").hidden = !n;
+        $("tc-delete-text").textContent = n ? `In questa categoria ci sono ${n} ${n === 1 ? "spesa" : "spese"}: scegli dove spostarle, poi premi Conferma.`
+          : "Nessuna spesa in questa categoria. Premi Conferma per eliminarla.";
+        $("tc-delete").textContent = "Conferma";
+        return;
+      }
+      dlg.close("delete");
+    };
+    dlg.onclose = () => {
+      if (dlg.returnValue === "delete") return resolve({ action: "delete", moveTo: $("tc-move").value });
+      if (dlg.returnValue === "ok") return resolve({ action: "save", budget: parseAmount($("tc-budget").value) || 0 });
+      resolve(null);
+    };
+    dlg.returnValue = "";
+    dlg.showModal();
+  });
+}
 $("trip-cat-add").addEventListener("click", async () => {
   const res = await askNumber("Nuova categoria", `Nome e budget per il viaggio ${currentTrip} (il budget puoi lasciarlo a 0).`, 0, true);
   if (!res?.name) return;

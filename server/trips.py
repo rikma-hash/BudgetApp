@@ -376,6 +376,30 @@ def add_category(wb: openpyxl.Workbook, ws: Worksheet, name: str, budget: float 
     return name
 
 
+def delete_category(ws: Worksheet, name: str, move_to: str | None = None) -> int:
+    """Toglie una categoria dal viaggio (la riga resta libera per una nuova). Le sue spese vanno in `move_to`,
+    altrimenti restano con il vecchio nome e finiscono in "Senza categoria". Restituisce quante spese ha spostato."""
+    names = [c for c, _ in categories(ws)]
+    cat = X.canonical(name, names)
+    if not cat:
+        raise KeyError(f"Categoria del viaggio '{name}' non trovata")
+    to = X.canonical(move_to, names) if move_to else None
+    if move_to and (not to or to == cat):
+        raise ValueError("Scegli un'altra categoria del viaggio in cui spostare le spese")
+    moved = 0
+    if to:
+        for r in range(TX_FIRST, TX_LAST + 1):
+            c = ws.cell(r, 4).value
+            if c and str(c).strip().casefold() == cat.casefold():
+                ws.cell(r, 4).value = to
+                moved += 1
+    for r in range(CAT_FIRST, tot_row(ws)):
+        if str(ws.cell(r, 7).value or "").strip().casefold() == cat.casefold():
+            ws.cell(r, 7).value = None
+            ws.cell(r, 8).value = None
+    return moved
+
+
 def _extend_cf(ws: Worksheet, last: int) -> None:
     """La formattazione rosso/verde della colonna J segue la tabella allungata."""
     from openpyxl.formatting.formatting import ConditionalFormattingList

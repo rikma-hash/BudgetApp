@@ -12,7 +12,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/style.css?v=43">
+<link rel="stylesheet" href="/static/style.css?v=44">
 <script>
   try {
     const p = JSON.parse(localStorage.getItem("prefs") || "{}");
@@ -104,6 +104,7 @@
 
     <div id="hist-year" hidden>
       <div class="stat-row" id="year-stats"></div>
+      <p class="hint center year-off" id="year-off" hidden></p>
       <div id="year-list"></div>
       <p class="hint center">Tocca un mese per vederne le spese.</p>
     </div>
@@ -122,6 +123,7 @@
     <div id="bud-plan" class="stack">
 
 <div class="cols"><div class="col">
+    <div class="card bal-card" id="plan-balance" hidden role="button" tabindex="0"></div>
     <div class="card ladder" id="plan-ladder"></div>
 
     <details class="card quiz" id="plan-quiz">
@@ -514,8 +516,38 @@
   </form>
 </dialog>
 
+<dialog id="tcdlg" class="small-dialog">
+  <form method="dialog">
+    <h3 id="tc-title">Categoria</h3>
+    <p id="tc-text"></p>
+    <label class="field">Budget (€) <input id="tc-budget" inputmode="decimal"></label>
+    <div id="tc-delete-box" hidden>
+      <p class="hint" id="tc-delete-text"></p>
+      <label class="field">Sposta le spese in <select id="tc-move"></select></label>
+    </div>
+    <div class="dlg-actions three">
+      <button type="button" class="secondary danger-text" id="tc-delete">Elimina</button>
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="baldlg" class="small-dialog">
+  <form method="dialog">
+    <h3>Soldi sul conto</h3>
+    <p class="hint">Scrivi quanto hai adesso sul conto (o in totale). Le spese che registri dal giorno dopo le toglie l'app da sola.</p>
+    <label class="field">Importo (€) <input id="bal-value" inputmode="decimal"></label>
+    <div class="dlg-actions three">
+      <button type="button" class="secondary danger-text" id="bal-clear">Togli</button>
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Salva</button>
+    </div>
+  </form>
+</dialog>
+
 <div id="toast" role="status"></div>
-<script src="/static/i18n.js?v=43"></script>
-<script src="/static/app.js?v=43"></script>
+<script src="/static/i18n.js?v=44"></script>
+<script src="/static/app.js?v=44"></script>
 </body>
 </html>

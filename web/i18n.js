@@ -55,6 +55,15 @@ const EXACT = {
   "Questa spesa è ancora in attesa: la puoi modificare quando arriva sul Mac.": "This expense is still waiting: you can edit it once it reaches the Mac.",
   "nessun budget": "no budget", "Totale del viaggio · tocca per aprirlo": "Trip total · tap to open",
   "Senza affitto": "Without rent", "Senza viaggi": "Without trips",
+  // storico: mesi nascosti · viaggi: elimina categoria · piano: soldi sul conto
+  "Non contare questo mese nei totali": "Don't count this month in the totals", "Conta di nuovo questo mese nei totali": "Count this month in the totals again",
+  "non contato nei totali": "not counted in the totals", "Conferma": "Confirm", "— lasciale senza categoria —": "— leave them without category —",
+  "Nessuna spesa in questa categoria. Premi Conferma per eliminarla.": "No expenses in this category. Press Confirm to delete it.",
+  "🏦 Soldi sul conto": "🏦 Money in the account", "Soldi sul conto": "Money in the account", "＋ Aggiungi": "＋ Add", "Togli": "Remove", "Scrivi un importo": "Write an amount",
+  "Il conto è tutto quello che hai; il budget è quanto decidi di spendere nel mese. Tocca per scrivere quanto hai.":
+    "The account is everything you have; the budget is what you decide to spend in the month. Tap to write how much you have.",
+  "Scrivi quanto hai adesso sul conto (o in totale). Le spese che registri dal giorno dopo le toglie l'app da sola.":
+    "Write how much you have in the account now (or in total). Expenses you add from the next day on are subtracted by the app.",
   "Il Mac non è raggiungibile": "The Mac can't be reached",
   "Il Mac non è raggiungibile: le nuove spese restano sul telefono e partono dopo.": "The Mac can't be reached: new expenses stay on the phone and are sent later.",
   "Il Mac non è raggiungibile: spese e modifiche restano sul telefono e partono dopo. Se il Mac è acceso, controlla che Tailscale sia attivo sul telefono.": "The Mac can't be reached: expenses and changes stay on the phone and are sent later. If the Mac is on, check that Tailscale is active on the phone.",
@@ -205,6 +214,10 @@ const EXACT = {
 
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
+  [/^Senza (.+) · tocca l'occhio per rimetterl[oi]$/, "Without $1 · tap the eye to count again"],
+  [/^Budget di (.+)$/, "$1 budget"],
+  [/^In questa categoria ci sono (\d+) (spesa|spese): scegli dove spostarle, poi premi Conferma\.$/, "This category has $1 expense(s): choose where to move them, then press Confirm."],
+  [/^Aggiornato: (.+) · (.+?)(?: · da allora spese per (.+))?\. Le entrate nuove non le vedo: tocca per aggiornare\.$/, (m, d, a, x) => `Updated: ${d} · ${a}${x ? ` · spent since then ${x}` : ""}. New income isn't tracked: tap to update.`],
   [/^Superi di (.+)$/, "Over by $1"],
   [/^Da dividere (.+)$/, "To assign $1"], [/^⚠️ Sfori di (.+)$/, "⚠️ Over by $1"], [/^Sfori di (.+)$/, "Over by $1"], [/^Restano (.+)$/, "$1 left"],
   [/^📋 Copia il budget di (.+) nei mesi dopo$/, "📋 Copy the $1 budget to the following months"],

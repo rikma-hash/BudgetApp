@@ -130,3 +130,11 @@
 - **Piano**: salvataggio automatico (niente più "Usa questo budget"), colonne Proposto | Il tuo, "Usa la proposta per tutte", "Copia nei mesi dopo", **barra fissa** con disponibile e "Sfori di X" mentre scrivi. Categorie: disponibile in cima e nella finestra della categoria.
 - **Home**: in grande quanto hai speso, sotto "Ti restano X di <budget totale>".
 - Provato su copia del file vero e sul modello vuoto a 390 px. Web v43.
+
+## 2026-11-06 · Occhio nello Storico, elimina categorie viaggio, parole chiave, soldi sul conto
+- Richieste dell'utente (per la sua app **e** per il modello GitHub).
+- **Storico › Anno**: occhio su ogni mese iniziato per toglierlo dai totali in alto (mese più chiaro); salvato in `profile.json` › `hidden_months`, uguale su tutti i dispositivi.
+- **Viaggi**: tocco su una categoria → budget oppure **Elimina** (le spese si spostano in un'altra categoria o restano "Senza categoria"). Nuovo `POST /api/trips/delete-category`, `trips.delete_category`; funziona anche a Mac spento (`patchOffline`).
+- **Parole chiave** (`server/keywords.json`): da 164 a 680 (supermercati, negozi, app di consegna, trasporti e abbonamenti di Italia, Germania, Olanda e altri). Tolte parole ambigue (es. "dott", "bonifico", "amazon").
+- **Piano**: riquadro **🏦 Soldi sul conto** separato da "Budget di <mese>"; `GET /api/balance` (stima = importo − spese registrate dopo).
+- Versione cache 43 → 44. Provato su copia (`test/rete`) a 390 px, chiaro e scuro; server vero riavviato.
