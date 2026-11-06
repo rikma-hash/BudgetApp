@@ -1,0 +1,23 @@
+<!-- accesso (versione indipendente): si vede solo finché non si è entrati -->
+<section class="login-screen" id="login" hidden>
+  <div class="login-wrap">
+    <header class="page-head"><p class="eyebrow">Spese</p><h1>Benvenuto 👋</h1></header>
+    <div class="card" id="login-cloud">
+      <h2>Entra con il tuo account</h2>
+      <p class="hint">I dati stanno online: li vedi da iPhone e computer, anche a computer spento.</p>
+      <form id="login-form" autocomplete="on">
+        <input id="login-email" type="email" autocomplete="username" placeholder="Email" required>
+        <input id="login-pass" type="password" autocomplete="current-password" placeholder="Password (almeno 6 caratteri)" minlength="6" required>
+        <button class="primary big" type="submit">Entra</button>
+        <button class="secondary" type="button" id="login-up">Crea un account nuovo</button>
+      </form>
+      <p class="hint" id="login-msg"></p>
+    </div>
+    <div class="card">
+      <h2>Prova senza account</h2>
+      <p class="hint">I dati restano solo in questo browser. Comodo per provare; per non perderli scarica ogni tanto l'Excel.</p>
+      <button class="secondary" type="button" id="login-demo">Usa senza account</button>
+    </div>
+  </div>
+</section>
+<div id="sync-pill" hidden></div>

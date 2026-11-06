@@ -1,0 +1,22 @@
+    <div class="card">
+      <h2>Account</h2>
+      <div id="acc-box"></div>
+      <div class="acc-actions"><button class="secondary" type="button" id="acc-logout">Esci dall'account</button></div>
+    </div>
+    <div class="card">
+      <h2>Excel</h2>
+      <p class="hint">Scarica un file Excel con tutto: riassunto, un foglio per mese, i viaggi e l'elenco delle spese.</p>
+      <div class="acc-actions">
+        <button class="primary big" type="button" id="acc-export">📗 Scarica Excel</button>
+        <button class="secondary" type="button" id="acc-import">📥 Importa dal vecchio Excel</button>
+      </div>
+      <p class="hint">Importa: scegli il <b>Budget_Tracker</b> della versione con il computer. Prendo mesi, viaggi, entrate, budget e abbonamenti; prima ti faccio vedere cosa ho trovato.</p>
+      <input type="file" id="acc-file" accept=".xlsx,.xlsm" hidden>
+      <div id="acc-preview" hidden></div>
+    </div>
+    <div class="card">
+      <h2>Zona pericolosa</h2>
+      <p class="hint">Cancella spese, budget, viaggi e categorie di questo account.</p>
+      <div class="acc-actions"><button class="secondary danger-text" type="button" id="acc-wipe">Cancella tutti i dati</button></div>
+    </div>
+    <div hidden><div id="offline-check"></div><div id="upd-box"></div></div>

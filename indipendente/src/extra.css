@@ -1,0 +1,20 @@
+/* Solo per la versione indipendente (il resto è lo stesso style.css dell'app). */
+.login-screen { position: fixed; inset: 0; z-index: 60; overflow-y: auto; background: var(--bg); }
+.login-wrap { max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 24px) 16px 40px; display: grid; gap: 14px; }
+.login-wrap h2 { margin-bottom: 4px; }
+.login-wrap form { display: grid; gap: 10px; margin-top: 12px; }
+.login-wrap input { font: inherit; width: 100%; padding: 14px 16px; border-radius: 14px; border: 0; background: var(--soft); color: var(--ink); }
+.login-wrap input:focus { outline: 2px solid var(--accent); }
+.login-wrap .secondary { margin-top: 0; }
+#login-msg:empty { display: none; }
+#login-msg.neg { color: var(--bad); }
+#acc-box p { margin: 6px 0; }
+#acc-box .ok-line { color: var(--good); font-weight: 600; }
+#acc-box .warn { color: var(--warn); font-weight: 600; }
+#acc-preview { margin-top: 12px; display: grid; gap: 8px; }
+#acc-preview .secondary { margin-top: 0; }
+.hint-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+.acc-actions { display: grid; gap: 8px; margin-top: 10px; }
+.acc-actions .secondary { margin-top: 0; }
+#sync-pill { position: fixed; top: calc(env(safe-area-inset-top) + 6px); left: 50%; transform: translateX(-50%); z-index: 30;
+  background: var(--soft); color: var(--warn); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; box-shadow: var(--shadow); }
