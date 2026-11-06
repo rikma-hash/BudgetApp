@@ -11,7 +11,8 @@ const TABLES = {
   categories:      { pk: ["name"],           cols: ["name", "position"] },
   months:          { pk: ["month"],          cols: ["month", "income", "incomes", "carry", "carry_on"] },
   budgets:         { pk: ["month", "category"], cols: ["month", "category", "amount"] },
-  expenses:        { pk: ["id"],             cols: ["id", "date", "description", "amount", "category", "note", "trip"] },
+  // la chiave primaria di expenses è solo id (le altre tabelle hanno user_id + pk)
+  expenses:        { pk: ["id"],             cols: ["id", "date", "description", "amount", "category", "note", "trip"], conflict: "id" },
   trips:           { pk: ["name"],           cols: ["name", "note", "position"] },
   trip_categories: { pk: ["trip", "name"],   cols: ["trip", "name", "budget", "position"] },
   subscriptions:   { pk: ["id"],             cols: ["id", "name", "amount", "day", "auto", "position"] },
@@ -183,7 +184,7 @@ const Store = {
     if (op.kind === "upsert") {
       const rows = op.rows.map((r) => ({ ...r, user_id: uid }));
       for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await sb.from(op.t).upsert(rows.slice(i, i + 500), { onConflict: ["user_id", ...pk].join(",") });
+        const { error } = await sb.from(op.t).upsert(rows.slice(i, i + 500), { onConflict: TABLES[op.t].conflict || ["user_id", ...pk].join(",") });
         if (error) throw error;
       }
       return;
