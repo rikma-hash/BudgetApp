@@ -150,3 +150,7 @@
 - Schema Supabase v2 (tabelle trips, trip_categories, subscriptions, settings; colonne incomes/carry/carry_on) applicato dall'utente.
 - Errore trovato e corretto: l'upsert delle spese usava `user_id,id` come chiave → tutte le spese rifiutate. Ora `expenses` usa `id`.
 - L'utente ha reimportato il suo Excel: dati online, controllati a schermo (Home, Viaggi, "Tutto salvato online"). Prossimo passo: pubblicazione su Vercel.
+
+## 2026-11-06 · Controllo di sicurezza della versione indipendente
+- Verificato da fuori (senza account) database, sito e GitHub: nessuna fuga possibile senza login; dettagli in `07-indipendente.md` › Sicurezza.
+- Aggiunte intestazioni di sicurezza al sito (`vercel.json`) e pulizia dei dati del vecchio account sul dispositivo quando ne entra un altro (`clearAccountData`). Tolto il `vercel.json` interno a `sito/` (era servito pubblicamente, innocuo).

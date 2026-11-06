@@ -28,5 +28,12 @@ Istruzioni complete: `indipendente/LEGGIMI.md`. Progetto Supabase dell'utente: i
 - `vercel.json` nella cartella principale del ramo: build `@vercel/static` solo su `indipendente/sito/**` e rotte verso quella cartella (`/` e `sw.js` senza cache). Verificato: server/, brain/, pyproject, .git → 404.
 - Deployment Protection spenta (con "Standard Protection" anche l'indirizzo …vercel.app chiede il login Vercel).
 
+## Sicurezza (controllo del 6/11)
+- Senza login (chiave publishable) Supabase rifiuta lettura/scrittura/cancellazione su tutte le tabelle (42501), elenco tabelle, elenco utenti; GraphQL spento, nessun bucket. Con login: RLS "solo i miei dati" su tutte le 8 tabelle (anche l'upsert di un id altrui viene bloccato dalla regola).
+- Sito: solo i file di `indipendente/sito` (resto del repository → 404), HTTPS obbligatorio, intestazioni `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` (in `vercel.json`).
+- GitHub (tutti i rami e la storia): nessuna chiave segreta, nessun Excel tranne il modello vuoto (controllato: solo zeri, autore "BudgetApp").
+- Dispositivo: uscendo, o se entra un altro account, `clearAccountData()` toglie copia del database, coda e copie `api:…`.
+- Rischi che restano (scelte, non errori): chi gestisce il progetto Supabase vede i dati di tutti dalla dashboard; registrazione aperta senza conferma email; account GitHub/Vercel/Supabase dell'utente da proteggere con la verifica in due passaggi.
+
 ## Prova locale
 `.claude/launch.json` › **spese-indipendente** (porta 8768, `python -m http.server` su `indipendente/sito`). Prima di ricaricare dopo una ricostruzione: togliere il service worker e le cache (altrimenti "prima la copia" mostra la versione vecchia).
