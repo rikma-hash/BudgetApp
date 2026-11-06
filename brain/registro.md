@@ -143,3 +143,10 @@
 - Dopo l'analisi del feedback esterno l'utente ha scelto di provare l'app **senza Mac**: sito statico in `indipendente/` + database Supabase (oppure dati solo nel browser).
 - Fatto: accesso (email+password o "senza account"), Home, Storico per mese con filtro, Budget per mese con entrate e salvataggio automatico, categorie (nuova/rinomina/elimina), aggiungi/modifica/elimina spesa con suggerimento (storico + parole chiave), **Importa dal vecchio Excel**, **Scarica Excel**.
 - Provato in modalità senza account a 390 px (chiaro/scuro) con la copia del file: totali uguali al Riassunto. **Supabase non ancora provato**: l'utente deve creare il progetto (passi in `indipendente/LEGGIMI.md`).
+
+## 2026-11-06 · Versione indipendente completa (ramo `prova-supabase`)
+- L'utente ha chiesto tutte le funzioni della sua app anche nella versione senza Mac. Rifatta così: stessa interfaccia (`web/`) copiata da `indipendente/costruisci.py`, con un **server nel telefono** (`src/server.js`) al posto del server Python e un archivio sincronizzato con Supabase, con coda senza rete (`src/store.js`).
+- Ci sono: viaggi veri, piano completo (entrate a lista, surplus/deficit, da parte, proposta, quiz, Disponibile, copia nei mesi, soldi sul conto), categorie, abbonamenti automatici, risparmi, Storico Anno con l'occhio, filtri Senza affitto/viaggi, rate, estratto conto CSV/PDF, import ed export Excel. Mancano i consigli di Claude.
+- Schema Supabase v2 (tabelle trips, trip_categories, subscriptions, settings; colonne incomes/carry/carry_on) applicato dall'utente.
+- Errore trovato e corretto: l'upsert delle spese usava `user_id,id` come chiave → tutte le spese rifiutate. Ora `expenses` usa `id`.
+- L'utente ha reimportato il suo Excel: dati online, controllati a schermo (Home, Viaggi, "Tutto salvato online"). Prossimo passo: pubblicazione su Vercel.
