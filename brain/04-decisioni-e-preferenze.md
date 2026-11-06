@@ -42,3 +42,7 @@ Fatto: blocco 1 Budget (2/11), blocco 2 Consigli con frecce (2/11), blocco 3 cat
 
 ## Licenza (3/11)
 - Gli altri possono **usare** l'app (gratis, uso personale) ma **non modificarla** né ridistribuirla modificata: `LICENSE` "uso personale", non open source. Le modifiche al codice le fa solo l'utente (è l'unico che può scrivere nel repository GitHub).
+
+## Due versioni (6/11)
+- **Con il computer** (`main`/`stabile`, file Excel) e **solo app** (ramo `prova-supabase`, Supabase + Vercel, vedi `07-indipendente.md`). Il README le presenta tutte e due. L'utente non ha ancora deciso quale usare ogni giorno: per ora i dati delle due versioni sono separati.
+- Il feedback esterno criticava la licenza "uso personale": l'utente non ha chiesto di toglierla, resta.

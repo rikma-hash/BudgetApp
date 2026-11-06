@@ -138,3 +138,8 @@
 - **Parole chiave** (`server/keywords.json`): da 164 a 680 (supermercati, negozi, app di consegna, trasporti e abbonamenti di Italia, Germania, Olanda e altri). Tolte parole ambigue (es. "dott", "bonifico", "amazon").
 - **Piano**: riquadro **🏦 Soldi sul conto** separato da "Budget di <mese>"; `GET /api/balance` (stima = importo − spese registrate dopo).
 - Versione cache 43 → 44. Provato su copia (`test/rete`) a 390 px, chiaro e scuro; server vero riavviato.
+
+## 2026-11-06 · Pagina GitHub (README) con le due strade
+- Dopo il feedback esterno: README riscritto in breve con immagini e tabella **📱 Solo app** (link + account, dati su Supabase) / **💻 Con il tuo computer** (GUIDA.md, file Excel). Avviso onesto: con la versione solo app i dati stanno nel database di chi gestisce il link.
+- Struttura del progetto, variabili e `brain/` spostati in un riquadro chiuso "Per chi sviluppa" (GitHub non permette di nascondere una cartella). Il link all'app online **non** è nel README (è in `privato.md`): gli amici lo chiedono all'utente.
+- Licenza "uso personale" **tenuta** (scelta dell'utente del 3/11), ridotta a una riga in fondo.
