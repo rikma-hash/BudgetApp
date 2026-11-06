@@ -1,0 +1,8 @@
+{
+  "builds": [{ "src": "indipendente/sito/**", "use": "@vercel/static" }],
+  "routes": [
+    { "src": "^/$", "dest": "/indipendente/sito/index.html", "headers": { "Cache-Control": "no-store" } },
+    { "src": "^/sw\\.js$", "dest": "/indipendente/sito/sw.js", "headers": { "Cache-Control": "no-store" } },
+    { "src": "^/(.*)$", "dest": "/indipendente/sito/$1" }
+  ]
+}
