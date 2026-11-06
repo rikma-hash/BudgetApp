@@ -34,8 +34,13 @@ Altri file: `config.js` (indirizzo e chiave pubblica di Supabase), `supabase/sch
 4. **Project Settings › API Keys**: *Project URL* e chiave *publishable* (o *anon*) in `config.js`. Mai la chiave *secret*.
 
 ## Pubblicarla (gratis) per usarla dall'iPhone
-- **Vercel** (piano Hobby): *Add New › Project* → repository GitHub → **Root Directory: `indipendente/sito`**,
-  Framework *Other*, nessun comando di build. Ramo: `prova-supabase`.
+- **Vercel** (piano Hobby): *Add New › Project* → repository GitHub → lascia la cartella principale (*root*),
+  Framework *Other*. Il file `vercel.json` nella cartella principale del ramo dice a Vercel di pubblicare **solo**
+  `indipendente/sito` come sito statico (senza, Vercel vede `pyproject.toml` e prova ad avviare il server Python).
+  La prima pubblicazione (dal ramo `main`) fallisce: è normale.
+- **Settings › Environments › Production › Branch Tracking** (o *Git › Production Branch*): `prova-supabase`.
+- **Settings › Deployment Protection › Vercel Authentication**: spento. Anche "Standard Protection" chiede il login
+  Vercel sull'indirizzo `….vercel.app`; i dati restano protetti dal login di Supabase.
 - In Supabase › **Authentication › URL Configuration** metti l'indirizzo di Vercel come *Site URL*.
 - Sull'iPhone: apri l'indirizzo in Safari → Condividi → **Aggiungi alla schermata Home**.
 

@@ -23,5 +23,10 @@ Istruzioni complete: `indipendente/LEGGIMI.md`. Progetto Supabase dell'utente: i
 - I viaggi sono dentro il Budget_Tracker: non c'è un file viaggi da importare a parte.
 - Il profilo del piano (`data/profile.json`) **non** è nell'Excel: non viene importato (l'utente rifà le 5 domande).
 
+## Pubblicazione (Vercel, dal 6/11)
+- Progetto Vercel collegato al repository, ramo di produzione `prova-supabase`; ogni push su quel ramo ripubblica da solo. Indirizzo in `privato.md`.
+- `vercel.json` nella cartella principale del ramo: build `@vercel/static` solo su `indipendente/sito/**` e rotte verso quella cartella (`/` e `sw.js` senza cache). Verificato: server/, brain/, pyproject, .git → 404.
+- Deployment Protection spenta (con "Standard Protection" anche l'indirizzo …vercel.app chiede il login Vercel).
+
 ## Prova locale
 `.claude/launch.json` › **spese-indipendente** (porta 8768, `python -m http.server` su `indipendente/sito`). Prima di ricaricare dopo una ricostruzione: togliere il service worker e le cache (altrimenti "prima la copia" mostra la versione vecchia).
