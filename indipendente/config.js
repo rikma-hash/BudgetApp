@@ -3,6 +3,6 @@
 // La chiave "anon" è fatta per stare nelle pagine web: i dati sono protetti dalle regole del database
 // (ognuno vede solo i suoi). NON mettere mai qui la chiave "service_role".
 window.SPESE_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://scctqxbbdqxsmgxzrjiv.supabase.co",
+  supabaseAnonKey: "sb_publishable_g1mcGRJCrd77pW9inc3Ilg_fyKh2zOv",
 };
