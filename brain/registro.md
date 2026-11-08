@@ -175,3 +175,4 @@
 - Merge di `main` (note, spese a Mac spento, ＋ Mese, avvisi da scorrere, budget con la virgola, nuovo viaggio dal ＋, parole chiave) e porting in `src/server.js` (`POST /api/months/add`, parola chiave più lunga vince).
 - Nuovo: **Elimina il mio account** (funzione `delete_my_account` in `schema.sql`, da lanciare nel SQL Editor) e categoria **Viaggi** sempre presente.
 - Provato in locale (porta 8768, senza account) a 390 px: nota salvata, budget 50,50 €, avviso, Dicembre aggiunto, viaggio creato dal ＋, Viaggi rimessa da sola.
+- Funzione `delete_my_account` creata su Supabase e provata dall'utente con un account finto: funziona.

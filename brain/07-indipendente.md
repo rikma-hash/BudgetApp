@@ -16,7 +16,7 @@ Istruzioni complete: `indipendente/LEGGIMI.md`. Progetto Supabase dell'utente: i
 
 - **Categoria Viaggi sempre presente** (8/11): `ensureViaggi()` all'avvio (dentro `applySubscriptions`), alla creazione di un viaggio e all'import dell'Excel.
 - **＋ Mese** (8/11): `POST /api/months/add` = mese dopo l'ultimo di `monthKeys()`, creato con `ensureMonth` (entrate e budget dell'ultimo).
-- **Elimina il mio account** (8/11, Impostazioni › Zona pericolosa, solo con account): due conferme → `Store.deleteAccount()` → `rpc("delete_my_account")` (funzione `security definer` in `schema.sql`: cancella `auth.users` dell'utente collegato, i dati vanno via a cascata) → esce e pulisce il dispositivo. **La funzione va creata a mano nel SQL Editor di Supabase** (rilanciare `schema.sql` o solo il pezzo finale).
+- **Elimina il mio account** (8/11, Impostazioni › Zona pericolosa, solo con account): due conferme → `Store.deleteAccount()` → `rpc("delete_my_account")` (funzione `security definer` in `schema.sql`: cancella `auth.users` dell'utente collegato, i dati vanno via a cascata) → esce e pulisce il dispositivo. Funzione creata dall'utente l'8/11 (Supabase avvisa "destructive operations": è normale, crearla non cancella niente); provata dall'utente con un account finto: eliminato, sparito da Authentication › Users. Senza accesso la chiamata dà 42501.
 
 ## Import del vecchio Excel (`src/excel.js`)
 - Per ogni foglio visibile: riga con "Descrizione" e "Importo"; tabella budget = seconda colonna "Categoria" con accanto "Budget…".
