@@ -276,3 +276,374 @@ def parse(filename: str, data: bytes) -> dict:
     if name.endswith((".csv", ".txt", ".tsv")) or b"," in data[:2000] or b";" in data[:2000]:
         return _to_expenses(parse_csv(data))
     raise ValueError("Formato non riconosciuto: usa un file CSV o PDF")
+
+
+# ---------- fogli di calcolo fatti a mano (Excel, Numbers, Google Fogli/LibreOffice, CSV senza date) ----------
+# Ogni tabella è {name, rows}; le colonne si riconoscono dal nome o dal contenuto. Casi gestiti:
+#  - colonne Data / Descrizione / Importo / Categoria (anche in ordine diverso o con nomi diversi);
+#  - "a matrice": una colonna per categoria con la cifra nella colonna giusta (es. Totale | Cibo | Svago…);
+#    le colonne "Di cui …" sono un dettaglio della categoria accanto (più precise, ma non si sommano);
+#  - senza date: il mese viene dal nome della tabella/foglio ("ottobre", "Oct 2025"), giorno 1.
+# Celle come "20 (da pagare)" → 20 € con nota "da pagare". Righe senza nome (es. i totali) saltate.
+
+MONTH_WORDS = {
+    1: ["gennaio", "january", "januar", "jan", "gen"], 2: ["febbraio", "february", "februar", "feb"],
+    3: ["marzo", "march", "märz", "maerz", "mar"], 4: ["aprile", "april", "apr"], 5: ["maggio", "may", "mai", "mag"],
+    6: ["giugno", "june", "juni", "jun", "giu"], 7: ["luglio", "july", "juli", "jul", "lug"],
+    8: ["agosto", "august", "aug", "ago"], 9: ["settembre", "september", "sept", "sep", "set"],
+    10: ["ottobre", "october", "oktober", "oct", "okt", "ott"], 11: ["novembre", "november", "nov"],
+    12: ["dicembre", "december", "dezember", "dec", "dez", "dic"],
+}
+T_DATE = DATE_COLS + ["giorno", "quando", "tag", "day", "when"]
+T_AMOUNT = AMOUNT_COLS + ["totale", "total", "tot", "costo", "prezzo", "price", "cost", "kosten", "preis", "summe",
+                          "spesa (€)", "€", "eur", "euro", "quanto", "cifra"]
+T_CAT = ["categoria", "categorie", "category", "kategorie", "tipo", "type", "gruppo", "genere"]
+T_DESC = ["descrizione", "description", "voce", "cosa", "nome", "dettaglio", "dettagli", "articolo", "oggetto", "item",
+          "what", "beschreibung", "bezeichnung", "was", "spesa", "causale", "note", "notes"]
+T_IN = IN_COLS + ["entrata", "income", "einnahmen", "einnahme"]
+SUB_PREFIX = re.compile(r"^\s*(di cui|davon|of which|incl\.?|including)\s+", re.I)
+TOTAL_WORDS = re.compile(r"^\s*(totale|totali|total|totals|tot\.?|somma|summe|gesamt|subtotale|subtotal)\b", re.I)
+
+
+def month_from_name(name: str, today: dt.date | None = None) -> tuple[int, int] | None:
+    """'ottobre' → (anno dell'ultimo ottobre non futuro, 10); 'Oct 2025' → (2025, 10)."""
+    today = today or dt.date.today()
+    low = str(name or "").lower()
+    found = None
+    for m, words in MONTH_WORDS.items():
+        for w in words:
+            if re.search(rf"(?<![a-zà-ü]){re.escape(w)}(?![a-zà-ü])", low):
+                found = found or m
+    if not found:
+        return None
+    y = re.search(r"\b(20\d{2})\b", low) or re.search(r"(?<!\d)'?(\d{2})\b", low)
+    if y:
+        year = int(y.group(1))
+        year = year + 2000 if year < 100 else year
+    else:
+        year = today.year if found <= today.month else today.year - 1
+    return year, found
+
+
+def _cell_text(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _num(v) -> tuple[float | None, str]:
+    """Valore numerico di una cella e l'eventuale testo che lo accompagna ('20 (da pagare)' → 20, 'da pagare')."""
+    if v is None or isinstance(v, bool):
+        return None, ""
+    if isinstance(v, (int, float)):
+        return float(v), ""
+    if isinstance(v, (dt.date, dt.datetime)):
+        return None, ""
+    s = str(v).strip()
+    a = parse_amount(s)
+    if a is not None:
+        return a, ""
+    m = re.match(r"^\s*([-−]?\s?€?\s?\d[\d.,']*)\s*€?\s*(.*)$", s)
+    if m:
+        a = parse_amount(m.group(1))
+        if a is not None:
+            return a, m.group(2).strip(" ()[]-–:·")
+    return None, ""
+
+
+def _as_date(v) -> dt.date | None:
+    if isinstance(v, dt.datetime):
+        return v.date()
+    if isinstance(v, dt.date):
+        return v
+    if isinstance(v, str) and re.search(r"\d", v):
+        return parse_date(v)
+    return None
+
+
+def _short(desc: str) -> str:
+    d = re.sub(r"\s+", " ", desc).strip()
+    if len(d) <= 40:
+        return d
+    cut = re.split(r"[,(;:]", d)[0].strip()
+    if 3 <= len(cut) <= 40:
+        return cut
+    return " ".join(d.split(" ")[:5])[:40]
+
+
+def parse_table(name: str, rows: list[list], today: dt.date | None = None) -> dict:
+    """Spese di una tabella fatta a mano → {items, income}. items senza data hanno 'nodate'."""
+    rows = [list(r)[:40] for r in rows[:5000]]
+    width = max((len(r) for r in rows), default=0)
+    rows = [r + [None] * (width - len(r)) for r in rows]
+    is_text = lambda v: isinstance(v, str) and v.strip() and _num(v)[0] is None and not _as_date(v)
+
+    def numeric_below(i, j):
+        return sum(1 for r in rows[i + 1:i + 60] if _num(r[j])[0] is not None)
+
+    head = None
+    for i, r in enumerate(rows[:30]):
+        texts = [j for j, v in enumerate(r) if is_text(v)]
+        if len(texts) >= 2 and any(numeric_below(i, j) for j in texts):
+            head = i
+            break
+    if head is None:
+        return {"items": [], "income": 0}
+    headers = [_cell_text(v).lower() for v in rows[head]]
+    data = rows[head + 1:]
+
+    def find(names, exclude=()):
+        j = _find([h if k not in exclude else "" for k, h in enumerate(headers)], names)
+        return j if j is not None and headers[j] else None
+
+    c_date = find(T_DATE)
+    if c_date is None:  # colonna con tante date anche senza nome
+        best = max(range(width), key=lambda j: sum(1 for r in data if _as_date(r[j])), default=None)
+        if best is not None and sum(1 for r in data if _as_date(r[best])) >= max(2, len(data) // 3):
+            c_date = best
+    used = {c_date}
+    c_amount = find(T_AMOUNT, used)
+    used.add(c_amount)
+    c_cat = find(T_CAT, used)
+    used.add(c_cat)
+    c_in = find(T_IN, used)
+    used.add(c_in)
+    c_desc = find(T_DESC, used)
+    if c_desc is None:  # la colonna con più testo
+        cand = [j for j in range(width) if j not in used]
+        c_desc = max(cand, key=lambda j: sum(1 for r in data if is_text(r[j])), default=None)
+    used.add(c_desc)
+    matrix = [j for j in range(width) if j not in used and headers[j] and numeric_below(head, j)]
+    main_cols = [j for j in matrix if not SUB_PREFIX.match(headers[j])]
+    sub_cols = [j for j in matrix if SUB_PREFIX.match(headers[j])]
+    if c_amount is None and not main_cols:
+        return {"items": [], "income": 0}
+
+    ym = month_from_name(name, today)
+    items, income = [], 0
+    for r in data:
+        desc = _cell_text(r[c_desc]) if c_desc is not None else ""
+        if not desc or TOTAL_WORDS.match(desc) or parse_amount(desc) is not None:
+            continue
+        notes = []
+        if c_amount is not None:
+            amount, extra = _num(r[c_amount])
+            if extra:
+                notes.append(extra)
+        else:
+            amount = None
+        cat = sub = None
+        total = 0.0
+        for j in main_cols:
+            v, extra = _num(r[j])
+            if v:
+                total += v
+                cat = cat or _cell_text(rows[head][j])
+                if extra and extra not in notes:
+                    notes.append(extra)
+        for j in sub_cols:
+            v, extra = _num(r[j])
+            if v:
+                sub = sub or SUB_PREFIX.sub("", _cell_text(rows[head][j])).strip()
+                if extra and extra not in notes:
+                    notes.append(extra)
+        if amount is None:
+            amount = total or None
+        if c_cat is not None and _cell_text(r[c_cat]):
+            cat = _cell_text(r[c_cat])
+        if c_in is not None and not amount and _num(r[c_in])[0]:
+            income += 1
+            continue
+        if not amount:
+            continue
+        if amount < 0:  # in un foglio di spese un numero negativo è un rimborso/entrata
+            income += 1
+            continue
+        day = _as_date(r[c_date]) if c_date is not None else None
+        item = {"original": desc, "description": _short(desc), "amount": round(amount, 2),
+                "note": " · ".join(notes) or None, "source_category": sub or cat, "src": name}
+        if day:
+            item["date"] = day.isoformat()
+        else:
+            y, m = ym or ((today or dt.date.today()).year, (today or dt.date.today()).month)
+            item.update(date=dt.date(y, m, 1).isoformat(), nodate=True, month_guess=bool(ym))
+        items.append(item)
+    return {"items": items, "income": income}
+
+
+def _xlsx_tables(data: bytes) -> list[tuple[str, list[list]]]:
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    out = []
+    for ws in wb.worksheets:
+        if getattr(ws, "sheet_state", "visible") != "visible":
+            continue
+        out.append((ws.title, [list(r) for r in ws.iter_rows(max_row=5000, max_col=40, values_only=True)]))
+    return out
+
+
+def _numbers_tables(data: bytes) -> list[tuple[str, list[list]]]:
+    import tempfile
+    from numbers_parser import Document
+    with tempfile.NamedTemporaryFile(suffix=".numbers") as f:
+        f.write(data)
+        f.flush()
+        doc = Document(f.name)
+        out = []
+        for sh in doc.sheets:
+            for t in sh.tables:
+                rows = [list(r) for r in t.iter_rows(values_only=True)]
+                out.append((f"{t.name} · {sh.name}", rows))
+        return out
+
+
+def _ods_tables(data: bytes) -> list[tuple[str, list[list]]]:
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = {"table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0", "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+          "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0"}
+    q = lambda p, n: "{" + ns[p] + "}" + n
+    root = ET.fromstring(zipfile.ZipFile(io.BytesIO(data)).read("content.xml"))
+    out = []
+    for t in root.iter(q("table", "table")):
+        rows = []
+        for row in t.iter(q("table", "table-row")):
+            cells = []
+            for c in row:
+                if c.tag not in (q("table", "table-cell"), q("table", "covered-table-cell")):
+                    continue
+                kind = c.get(q("office", "value-type"))
+                if kind in ("float", "currency", "percentage"):
+                    v = float(c.get(q("office", "value")))
+                elif kind == "date":
+                    v = parse_date(c.get(q("office", "date-value"), "")[:10])
+                else:
+                    v = "\n".join("".join(p.itertext()) for p in c.findall(q("text", "p"))) or None
+                n = min(int(c.get(q("table", "number-columns-repeated"), "1")), 40)
+                cells += [v] * n
+            while cells and cells[-1] in (None, ""):
+                cells.pop()
+            n = min(int(row.get(q("table", "number-rows-repeated"), "1")), 5000)
+            rows += [cells] * (n if cells else min(n, 1))
+            if len(rows) > 5000:
+                break
+        out.append((t.get(q("table", "name"), "Foglio"), rows))
+    return out
+
+
+def parse_ofx(text: str) -> list[dict]:
+    raw = []
+    for block in re.split(r"<STMTTRN>", text, flags=re.I)[1:]:
+        block = re.split(r"</STMTTRN>", block, flags=re.I)[0]
+        get = lambda tag: (re.search(rf"<{tag}>\s*([^<\r\n]*)", block, re.I) or [None, ""])[1].strip()
+        d = get("DTPOSTED") or get("DTUSER")
+        amount = parse_amount(get("TRNAMT").replace(",", "."))
+        if not re.match(r"\d{8}", d) or amount is None:
+            continue
+        name, memo = get("NAME"), get("MEMO")
+        raw.append({"date": dt.date(int(d[:4]), int(d[4:6]), int(d[6:8])), "original": " · ".join(x for x in (name, memo) if x) or "Spesa",
+                    "name": name or memo or "Spesa", "signed": amount})
+    if not raw:
+        raise ValueError("Non ho trovato movimenti in questo file OFX")
+    return raw
+
+
+def parse_qif(text: str) -> list[dict]:
+    recs, cur = [], {}
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("!"):
+            continue
+        if line.startswith("^"):
+            if cur:
+                recs.append(cur)
+            cur = {}
+            continue
+        cur.setdefault(line[0], line[1:].strip())
+    if cur:
+        recs.append(cur)
+    # ordine giorno/mese: se una data ha il secondo numero > 12 è mese/giorno (formato americano)
+    parts = [re.findall(r"\d+", r.get("D", "")) for r in recs]
+    us = any(len(p) >= 2 and int(p[1]) > 12 for p in parts) and not any(len(p) >= 2 and int(p[0]) > 12 for p in parts)
+    raw = []
+    for r, p in zip(recs, parts):
+        if len(p) < 3 or "T" not in r and "U" not in r:
+            continue
+        a, b, y = (int(x) for x in p[:3])
+        if len(p[0]) == 4:
+            y, a, b = a, b, y  # 2026-10-03
+            day, month = b, a
+        else:
+            day, month = (b, a) if us else (a, b)
+        y = y + 2000 if y < 100 else y
+        amount = parse_amount(r.get("T") or r.get("U"))
+        try:
+            date = dt.date(y, month, day)
+        except ValueError:
+            continue
+        if amount is None:
+            continue
+        name, memo = r.get("P", ""), r.get("M", "")
+        raw.append({"date": date, "original": " · ".join(x for x in (name, memo) if x) or "Spesa",
+                    "name": name or memo or "Spesa", "signed": amount})
+    if not raw:
+        raise ValueError("Non ho trovato movimenti in questo file QIF")
+    return raw
+
+
+def _tables_result(tables: list[tuple[str, list[list]]], months: dict | None = None) -> dict:
+    items, income, sources = [], 0, []
+    for name, rows in tables:
+        res = parse_table(name, rows)
+        if not res["items"]:
+            continue
+        override = (months or {}).get(name)
+        if override:
+            for it in res["items"]:
+                if it.get("nodate"):
+                    it["date"] = f"{override}-01"
+        nod = [it for it in res["items"] if it.get("nodate")]
+        if nod:
+            sources.append({"src": name, "month": nod[0]["date"][:7], "guess": nod[0]["month_guess"], "count": len(nod)})
+        items += res["items"]
+        income += res["income"]
+    items.sort(key=lambda x: x["date"])
+    return {"items": items, "income": income, "sources": sources, "kind": "table"}
+
+
+def parse_any(filename: str, data: bytes, months: dict | None = None) -> dict:
+    """Come `parse`, ma riconosce anche Excel, Numbers, ODS (Google Fogli/LibreOffice), OFX, QIF e i CSV fatti a mano."""
+    name = filename.lower()
+    if data[:5] == b"%PDF-" or name.endswith(".pdf"):
+        return _to_expenses(parse_pdf(data))
+    if data[:4] == b"\xd0\xcf\x11\xe0":
+        raise ValueError("È un file Excel vecchio (.xls): aprilo e salvalo come .xlsx, poi riprova")
+    if data[:2] == b"PK":
+        import zipfile
+        z = zipfile.ZipFile(io.BytesIO(data))
+        names = set(z.namelist())
+        if "xl/workbook.xml" in names:
+            return _tables_result(_xlsx_tables(data), months)
+        if "content.xml" in names and ("mimetype" not in names or b"opendocument.spreadsheet" in z.read("mimetype")):
+            return _tables_result(_ods_tables(data), months)
+        if any(n.startswith("Index/") for n in names) or name.endswith(".numbers"):
+            return _tables_result(_numbers_tables(data), months)
+        raise ValueError("Formato non riconosciuto: usa Excel, Numbers, CSV, PDF, OFX o QIF")
+    text = _decode(data)
+    if re.search(r"<OFX>|OFXHEADER", text[:3000], re.I) or name.endswith(".ofx"):
+        return _to_expenses(parse_ofx(text))
+    if text.lstrip().startswith("!Type") or name.endswith(".qif"):
+        return _to_expenses(parse_qif(text))
+    if name.endswith((".csv", ".txt", ".tsv")) or "," in text[:2000] or ";" in text[:2000] or "\t" in text[:2000]:
+        try:
+            return _to_expenses(parse_csv(data))
+        except ValueError:
+            lines = [l for l in text.splitlines() if l.strip()]
+            delim = max([";", ",", "\t", "|"], key=lambda d: "\n".join(lines[:30]).count(d))
+            rows = [[c if c.strip() else None for c in r] for r in csv.reader(lines, delimiter=delim)]
+            res = _tables_result([(filename.rsplit(".", 1)[0], rows)], months)
+            if res["items"]:
+                return res
+            raise ValueError("Non trovo le colonne con descrizione e importo in questo file CSV")
+    raise ValueError("Formato non riconosciuto: usa Excel, Numbers, CSV, PDF, OFX o QIF")

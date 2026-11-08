@@ -649,3 +649,10 @@ body.has-plan-bar { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .tx-list li.planned { opacity: .5; }
 .tx-list li.planned .amt::before { content: "≈ "; font-weight: 400; }
 #rep-hint span { display: block; margin-top: 2px; }
+
+/* import da fogli senza date: mese per tabella (8/11) */
+.imp-months { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--line); }
+.imp-months p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+.imp-months .field span { display: flex; flex-direction: column; min-width: 0; }
+.imp-months .field small { color: var(--muted); font-size: 12px; }
+.imp-months select { font: inherit; font-weight: 600; background: var(--soft); color: var(--ink); border: 0; border-radius: 10px; padding: 9px 10px; max-width: 55%; }
