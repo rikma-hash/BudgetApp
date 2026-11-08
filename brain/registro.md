@@ -176,3 +176,5 @@
 - Nuovo: **Elimina il mio account** (funzione `delete_my_account` in `schema.sql`, da lanciare nel SQL Editor) e categoria **Viaggi** sempre presente.
 - Provato in locale (porta 8768, senza account) a 390 px: nota salvata, budget 50,50 €, avviso, Dicembre aggiunto, viaggio creato dal ＋, Viaggi rimessa da sola.
 - Funzione `delete_my_account` creata su Supabase e provata dall'utente con un account finto: funziona.
+- Pubblicato per gli amici (`main` → `stabile`, dddd28a): si aggiornano da soli entro 6 ore.
+- Correzione: "✈️ Nuovo viaggio…" nel ＋ risultava scelto (verde) insieme a "Spesa del mese". Web v46.
