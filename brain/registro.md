@@ -155,3 +155,4 @@
 - **Parole chiave**: da 680 a ~2.050, nuove categorie Affitto, Università, Animali; tolte parole ambigue (es. "max", "now", "tua", "poco", "amazon" in Casa); **a parità vince la parola più lunga** (`suggest.py` e `localSuggest`: "carnet" non va più in Spesa per "carne").
 - Versione cache 44 → 45. Provato su copia (`test/rete`) a 390 px.
 - Pubblicato per gli amici (`main` → `stabile`, dddd28a): si aggiornano da soli entro 6 ore.
+- Correzione: "✈️ Nuovo viaggio…" nel ＋ risultava scelto (verde) insieme a "Spesa del mese". Web v46.

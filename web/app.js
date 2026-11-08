@@ -726,7 +726,7 @@ async function newTripFromSheet() {
 
 function setWhere(trip) {
   sheet.trip = trip;
-  document.querySelectorAll("#where-pills button").forEach((b) => b.classList.toggle("on", (b.dataset.where || null) === trip));
+  document.querySelectorAll("#where-pills button[data-where]").forEach((b) => b.classList.toggle("on", (b.dataset.where || null) === trip));
   const t = trip && tripsCache.find((x) => x.name === trip);
   sheet.cats = t ? t.categories.filter((c) => !c.virtual).map((c) => c.category) : knownCats();
   $("sheet-title").textContent = sheet.mode === "edit" ? "Modifica spesa" : trip ? `${LANG === "en" ? "Expense" : "Spesa"} · ${trip}` : "Nuova spesa";
