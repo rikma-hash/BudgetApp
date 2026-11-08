@@ -968,6 +968,7 @@ def trip_copy_budget(body: TripCopy):
 class ImportFile(BaseModel):
     filename: str
     data: str  # contenuto del file in base64
+    months: dict[str, str] | None = None  # tabelle senza date: {nome tabella: "AAAA-MM"} scelto dall'utente
 
 
 @app.post("/api/import/parse")
@@ -980,7 +981,7 @@ def import_parse(body: ImportFile):
     if len(raw) > 8_000_000:
         raise HTTPException(400, "File troppo grande (max 8 MB)")
     try:
-        parsed = importer.parse(body.filename, raw)
+        parsed = importer.parse_any(body.filename, raw, body.months)
     except ValueError as err:
         raise HTTPException(400, str(err))
     except Exception as err:  # PDF rovinati, codifiche strane…
@@ -1004,15 +1005,57 @@ def import_parse(body: ImportFile):
             dup = next((t for t in existing if abs(t["amount"] - it["amount"]) < 0.005
                         and abs((dt.date.fromisoformat(t["date"]) - day).days) <= 2), None)
             known = known_categories(wb, day)
-            sug = suggester.suggest(it["description"], known, use_ai=False)["suggestions"]
-            top = sug[0] if sug else None
+            top = _import_category(it, known)
             items.append({**it, "i": i, "blocked": blocked,
                           "duplicate": f"{dup['description']} ({dup['sheet']})" if dup else None,
                           "category": top["category"] if top else None, "new": bool(top and top["new"]),
                           "score": round(top["score"], 2) if top else 0})
         cats = known_categories(wb)
     _ai_categories(items, cats)
-    return {"items": items, "income": parsed["income"], "categories": cats}
+    return {"items": items, "income": parsed["income"], "categories": cats,
+            "sources": parsed.get("sources", []), "kind": parsed.get("kind", "bank")}
+
+
+# nomi di categoria che si trovano spesso nei fogli fatti a mano → categorie dell'app (la prima che esiste)
+SHEET_SYNONYMS = {
+    "cibo": ["Spesa"], "alimentari": ["Spesa"], "supermercato": ["Spesa"], "groceries": ["Spesa"], "food": ["Spesa"],
+    "lebensmittel": ["Spesa"], "ristorante": ["Mensa", "Ristoranti"], "ristoranti": ["Mensa", "Ristoranti"], "mensa": ["Mensa"],
+    "restaurant": ["Mensa", "Ristoranti"], "vestiti": ["Abbigliamento"], "abiti": ["Abbigliamento"], "clothes": ["Abbigliamento"],
+    "kleidung": ["Abbigliamento"], "extra": ["Varie"], "altro": ["Varie"], "altre": ["Varie"], "other": ["Varie"], "misc": ["Varie"],
+    "sonstiges": ["Varie"], "divertimento": ["Svago"], "fun": ["Svago"], "freizeit": ["Svago"], "viaggi": ["Viaggi"],
+    "viaggio": ["Viaggi"], "travel": ["Viaggi"], "reisen": ["Viaggi"], "trasporti": ["Trasporti"], "trasporto": ["Trasporti"],
+    "transport": ["Trasporti"], "cura personale": ["Cura personale", "Salute"], "salute": ["Salute"], "health": ["Salute"],
+    "affitto": ["Affitto"], "rent": ["Affitto"], "miete": ["Affitto"], "regali": ["Regali"], "gifts": ["Regali"],
+    "abbonamenti": ["Abbonamenti"], "subscriptions": ["Abbonamenti"], "bollette": ["Bollette", "Casa"], "casa": ["Casa"],
+}
+
+
+def _import_category(it: dict, known: list[str]) -> dict | None:
+    """Categoria proposta: quella del foglio se esiste già con quel nome; altrimenti la migliore tra il suggerimento
+    dal nome della spesa e quello dal nome della categoria del foglio (es. "ristorante/mensa" → Mensa)."""
+    src = (it.get("source_category") or "").strip()
+    if src:
+        canon = X.canonical(src, known)
+        if canon:
+            return {"category": canon, "new": False, "score": 1.0}
+    parts = [re.sub(r"\s+(ecc|etc|usw)\.?$|\s*(…|\.\.\.)$", "", x.strip(), flags=re.I)
+             for x in re.split(r"[/,&+]| e | and | und ", src) if x.strip()] if src else []
+    sug = suggester.suggest(it["description"], known, use_ai=False)["suggestions"]
+    top = sug[0] if sug else None
+    if top and not top["new"] and (top["score"] >= 0.9 or (top["source"] == "storico" and top["score"] >= 0.75)):
+        # il nome dice già molto (es. "Lavatrici", che hai già usato)
+        return top
+    for part in parts:  # "Svago/viaggi" → Svago; "Vestiti" → Abbigliamento; "Extra" → Varie
+        for name in [part, *SHEET_SYNONYMS.get(part.casefold(), [])]:
+            canon = X.canonical(name, known)
+            if canon:
+                return {"category": canon, "new": False, "score": 0.95}
+    if src and (top is None or top["score"] < 0.75):
+        for part in parts:
+            alt = suggester.suggest(part.strip(), known, use_ai=False)["suggestions"] if part.strip() else []
+            if alt and not alt[0]["new"] and (top is None or top["new"] or alt[0]["score"] > top["score"]):
+                top = {**alt[0], "score": min(alt[0]["score"], 0.79)}
+    return top
 
 
 IMPORT_PROMPT = """Sei l'assistente del budget personale di {context}. Categorie esistenti: {cats}.

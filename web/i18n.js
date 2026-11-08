@@ -12,6 +12,10 @@ const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July
 const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
 const EXACT = {
+  // import da fogli di calcolo (8/11)
+  "Dall'estratto conto della banca, dai movimenti della carta o da un tuo foglio di calcolo.": "From your bank statement, card transactions or your own spreadsheet.",
+  "Il foglio non ha le date: metto le spese al 1° del mese.": "The sheet has no dates: I'll put the expenses on the 1st of the month.",
+  "I fogli non hanno le date: metto le spese al 1° del mese.": "The sheets have no dates: I'll put the expenses on the 1st of the month.",
   // pagamenti che si ripetono (8/11)
   "Si ripete": "Repeats", "Ogni mese": "Every month", "Ogni 3 mesi": "Every 3 months", "Ogni anno": "Every year", "Personalizza…": "Custom…",
   "Ogni": "Every", "Nei giorni": "On", "Finisce": "Ends", "Mai": "Never", "Il": "On", "Dopo": "After", "volte": "times", "Fatto": "Done",
@@ -170,7 +174,9 @@ const EXACT = {
   // import
   "Importa spese": "Import expenses", "Dall'estratto conto della banca o dai movimenti della carta.": "From your bank statement or card transactions.",
   "Nell'app della banca o della carta scarica i movimenti in": "In your bank or card app, download the transactions as",
-  "(va meglio) oppure in": "(works best) or as", "Salvalo in File:": "Save it to Files:", "Condividi › Salva su File": "Share › Save to Files",
+  "(va meglio) oppure in": "(works best) or as", "(va meglio),": "(works best),", "o": "or",
+  "Oppure usa un tuo foglio delle spese:": "Or use your own expense sheet:", "Google Fogli": "Google Sheets",
+  "(File › Scarica › Excel o ODS) o LibreOffice.": "(File › Download › Excel or ODS) or LibreOffice.", "Salvalo in File:": "Save it to Files:", "Condividi › Salva su File": "Share › Save to Files",
   "Sceglilo qui sotto: ti mostro le spese con la categoria già proposta, tu controlli e confermi.": "Pick it below: I'll show you the expenses with a suggested category, you check and confirm.",
   "📄 Scegli il file": "📄 Choose the file", "Scegli il file": "Choose the file", "Seleziona tutte": "Select all", "Nessuna": "None", "Altro file": "Another file",
   "Trovate": "Found", "Scelte": "Selected", "Totale": "Total", "Non riesco ad aprire il file": "I can't open the file",
@@ -232,6 +238,7 @@ const EXACT = {
 
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
+  [/^(.*) · nel foglio: (.+)$/, "$1 · in the sheet: $2"], [/^(\d+) spes[ae] · mese non trovato nel nome$/, "$1 expenses · month not found in the name"],
   // pagamenti che si ripetono (8/11)
   [/^(.*(?:ogni |volte in tutto|prossima |fino al ).*)$/, (m) => m
     .replace(/ogni (\d+) (giorni|settimane|mesi|anni)/g, (_, n, u) => `every ${n} ${{ giorni: "days", settimane: "weeks", mesi: "months", anni: "years" }[u]}`)
