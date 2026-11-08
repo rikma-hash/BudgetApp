@@ -27,6 +27,7 @@ from . import advisor
 from . import importer
 from . import excel as X
 from . import trips as T
+from . import recurring as R
 from .updater import Updater, RESTART_CODE
 from .suggest import Suggester, ask_text, claude_cli, AI_MODE, context as user_context
 
@@ -36,6 +37,7 @@ DATA = Path(os.environ.get("BUDGET_DATA", ROOT / "data"))
 BACKUPS = Path(os.environ.get("BUDGET_BACKUPS", ROOT / "backups"))
 PENDING = DATA / "pending.json"
 DONE = DATA / "done_ids.json"
+RECURRING = DATA / "recurring.json"
 
 lock = threading.RLock()
 updater = Updater(ROOT, DATA)
@@ -105,6 +107,15 @@ def write(fn):
 
 # ---------- scrittura (con coda se Excel è aperto) ----------
 
+class Repeat(BaseModel):
+    every: int = Field(default=1, ge=1, le=99)
+    unit: str = Field(default="month", pattern="^(day|week|month|year)$")
+    days: list[int] = []  # solo "settimana": 0 = lunedì … 6 = domenica
+    end: str = Field(default="never", pattern="^(never|date|count)$")
+    until: dt.date | None = None
+    count: int | None = Field(default=None, ge=1, le=999)
+
+
 class Expense(BaseModel):
     id: str
     date: dt.date
@@ -114,6 +125,7 @@ class Expense(BaseModel):
     note: str | None = None
     new_category_budget: float | None = None  # valorizzato = "crea la categoria se manca"
     split: int = Field(default=1, ge=1, le=24)  # >1 = spesa divisa in rate uguali, una per mese
+    repeat: Repeat | None = None  # pagamento che si ripete: questa è la prima volta, le altre entrano da sole
 
 
 def _add_months(day: dt.date, n: int) -> dt.date:
@@ -125,6 +137,8 @@ def _add_months(day: dt.date, n: int) -> dt.date:
 
 def installments(e: Expense) -> list[tuple[dt.date, str, float, str | None]]:
     """(data, descrizione, importo, nota) di ogni rata; l'ultima prende i centesimi che avanzano."""
+    if e.repeat is not None:
+        return [(e.date, e.description.strip(), e.amount, R.note({**e.repeat.model_dump(), "note": e.note}))]
     if e.split <= 1:
         return [(e.date, e.description.strip(), e.amount, e.note)]
     part = round(e.amount / e.split, 2)
@@ -154,6 +168,14 @@ def _apply(e: Expense) -> dict:
         X.save(wb, XLSX, BACKUPS)
     finally:
         _invalidate()
+    if e.repeat is not None:
+        rules = _read_json(RECURRING, [])
+        if not any(r["id"] == e.id for r in rules):
+            rules.append({"id": e.id, "name": e.description.strip(), "amount": e.amount, "category": info["category"],
+                          "note": e.note or None, "start": e.date.isoformat(),
+                          **json.loads(e.repeat.model_dump_json()), "last": e.date.isoformat(),
+                          "created": dt.date.today().isoformat()})
+            _write_json(RECURRING, rules)
     suggester.learn(e.description, info["category"])
     return info
 
@@ -212,6 +234,35 @@ def _auto_subscriptions() -> list[dict]:
     return added
 
 
+def _auto_recurring() -> list[dict]:
+    """Pagamenti che si ripetono → spese, quando arriva il loro giorno (anche più volte se erano rimaste indietro)."""
+    today = dt.date.today()
+    with lock:
+        rules = _read_json(RECURRING, [])
+        todo = [(r, R.due(r, today)) for r in rules]
+        todo = [(r, days) for r, days in todo if days]
+        if not todo or X.is_locked(XLSX):
+            return []
+        added = []
+
+        def do(wb):
+            for r, days in todo:
+                for day in days:
+                    ws, _ = X.ensure_month(wb, day)
+                    cat = X.ensure_category(wb, ws, r["category"])
+                    X.append_expense(wb, day, r["name"], r["amount"], cat, R.note(r))
+                    added.append({"name": r["name"], "amount": r["amount"], "date": day.isoformat(), "sheet": ws.title})
+        try:
+            write(do)
+        finally:
+            _invalidate()
+        for r, days in todo:
+            r["last"] = days[-1].isoformat()
+        _write_json(RECURRING, rules)
+    print("pagamenti ripetuti inseriti:", added)
+    return added
+
+
 def _update_and_restart(force: bool = False) -> dict:
     """Controlla GitHub; se ha installato una versione nuova, spegne il server (avvia.py lo riaccende)."""
     with lock:  # niente scritture sul file Excel a metà aggiornamento
@@ -241,6 +292,10 @@ def _worker():
                 _auto_subscriptions()
             except Exception as err:
                 print("abbonamenti:", err)
+            try:
+                _auto_recurring()
+            except Exception as err:
+                print("pagamenti ripetuti:", err)
         if time.time() > next_update:
             next_update = time.time() + 6 * 3600
             try:
@@ -330,7 +385,13 @@ def add_expense(e: Expense):
             _write_json(PENDING, _read_json(PENDING, []) + [json.loads(e.model_dump_json())])
             return {"status": "queued", "reason": "Excel è aperto: la scrivo appena lo chiudi"}
         _write_json(DONE, sorted(set(_read_json(DONE, [])) | {e.id})[-2000:])
-        return {"status": "saved", **info}
+    added = []
+    if e.repeat is not None:
+        try:
+            added = _auto_recurring()  # volte già passate (data d'inizio indietro nel tempo)
+        except Exception as err:
+            print("pagamenti ripetuti:", err)
+    return {"status": "saved", **info, "repeat_added": len(added)}
 
 
 class BudgetIn(BaseModel):
@@ -395,7 +456,72 @@ def month(sheet: str):
         ws = wb[sheet]
         txs = sorted(X.transactions(ws), key=lambda t: (t["date"] or "", t["row"]), reverse=True)
         return {"summary": X.summary(ws), "transactions": txs,
-                "categories": [c for c, _ in X.budget_table(ws)]}
+                "categories": [c for c, _ in X.budget_table(ws)], "planned": _planned(wb, ws)}
+
+
+def _planned(wb, ws) -> list[dict]:
+    """Volte future dei pagamenti ripetuti che cadono in questo mese (solo da mostrare, non nei totali)."""
+    today = dt.date.today()
+    # al massimo un anno: un foglio ancora vuoto (es. "Febbraio") non sa di che anno è
+    before = today.replace(day=1, year=today.year + 1)
+    out = []
+    for r in _read_json(RECURRING, []):
+        for day in R.upcoming(r, today, before):
+            if X.sheet_for(wb, day) is ws:
+                out.append({"rid": r["id"], "date": day.isoformat(), "description": r["name"],
+                            "amount": r["amount"], "category": r["category"], "note": R.note(r)})
+    return sorted(out, key=lambda t: t["date"], reverse=True)
+
+
+# ---------- pagamenti che si ripetono ----------
+
+def _rule_out(r: dict) -> dict:
+    nxt = R.next_date(r)
+    return {**r, "next": nxt.isoformat() if nxt else None}
+
+
+@app.get("/api/recurring")
+def recurring_get():
+    with lock:
+        return {"items": [_rule_out(r) for r in _read_json(RECURRING, [])]}
+
+
+class RecurringEdit(Repeat):
+    id: str
+    name: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+    category: str = Field(min_length=1)
+    start: dt.date | None = None
+
+
+@app.post("/api/recurring/edit")
+def recurring_edit(body: RecurringEdit):
+    """Cambia la regola: vale per le volte future (quelle già inserite restano come sono)."""
+    with lock:
+        rules = _read_json(RECURRING, [])
+        r = next((r for r in rules if r["id"] == body.id), None)
+        if r is None:
+            raise HTTPException(404, "Pagamento non trovato")
+        data = json.loads(body.model_dump_json(exclude={"id"}))
+        if not data.get("start"):
+            data.pop("start")
+        r.update(data)
+        _write_json(RECURRING, rules)
+    added = _auto_recurring()
+    return {"status": "ok", "item": _rule_out(r), "added": len(added)}
+
+
+class RecurringId(BaseModel):
+    id: str
+
+
+@app.post("/api/recurring/delete")
+def recurring_delete(body: RecurringId):
+    """Smette di ripetersi: le spese già inserite restano."""
+    with lock:
+        rules = _read_json(RECURRING, [])
+        _write_json(RECURRING, [r for r in rules if r["id"] != body.id])
+    return {"status": "ok"}
 
 
 @app.get("/api/year")
