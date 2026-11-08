@@ -20,6 +20,8 @@ Istruzioni complete: `indipendente/LEGGIMI.md`. Progetto Supabase dell'utente: i
 
 - **Pagamenti che si ripetono** (8/11, v47): regole in `settings.data.recurring` (come `data/recurring.json` sul Mac; tolte da `GET /api/profile`). `addExpense` con `repeat` crea la regola (`last` = data della spesa) e chiama `applyRecurring`; `applyAuto` = abbonamenti + ripetuti, all'avvio (login.js chiama `SpeseServer.applySubscriptions`, che ora è `applyAuto`) e ogni 30 min. `GET /api/month` › `planned` (`plannedIn`), `GET /api/recurring`, `POST /api/recurring/edit|delete`. I previsti compaiono solo nei mesi che esistono già (＋ Mese per vederne altri).
 
+- **Import da fogli e file della banca** (8/11, v48): `src/importer.js` come `importer.parse_any` sul Mac: Excel/.xls/ODS/Numbers con SheetJS (`workbookTables`, nome tabella di Numbers non disponibile → mese da scegliere), OFX, QIF, CSV fatti a mano (letti con `splitCsv`, non SheetJS che leggerebbe "12,50" come 1250); `parseTable`/`tablesResult` uguali a Python. Categoria proposta con `importCategory` + `SHEET_SYNONYMS` in server.js.
+
 ## Import del vecchio Excel (`src/excel.js`)
 - Per ogni foglio visibile: riga con "Descrizione" e "Importo"; tabella budget = seconda colonna "Categoria" con accanto "Budget…".
 - Entrate: tabella "💶 ENTRATE DEL MESE" se c'è, altrimenti le cifre in colonna B sopra le spese (nome = etichetta senza "da ricevere:"). Surplus/deficit dalla riga "riportato/surplus/deficit"; contato se la formula del BUDGET TOTALE lo include (le formule senza valore salvato si leggono solo con `sheetStubs: true`, seconda lettura `wbF`).

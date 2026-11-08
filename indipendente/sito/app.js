@@ -2340,6 +2340,7 @@ $("imp-file").addEventListener("change", async () => {
     // di partenza: selezionate tutte tranne quelle già presenti o non importabili
     res.items.forEach((it) => { it.on = !it.duplicate && !it.blocked; });
     imp = res;
+    imp.file = { filename: f.name, data, months: {} };
     $("imp-status").textContent = "";
     $("imp-start").hidden = true;
     $("imp-review").hidden = false;
@@ -2359,6 +2360,17 @@ function renderImport() {
   if (imp.income) notes.push(`${imp.income} ${one(imp.income, "entrata", "entrate")} (accrediti, bonifici ricevuti) non ${one(imp.income, "la", "le")} importo.`);
   notes.push("Controlla soprattutto le spese fatte in viaggio: vanno aggiunte dal viaggio.");
   $("imp-note").innerHTML = notes.map(esc).join("<br>");
+  // fogli senza date: tutte al 1° del mese, mese scelto qui (proposto dal nome della tabella, es. "ottobre")
+  const srcs = imp.sources || [];
+  $("imp-months").hidden = !srcs.length;
+  $("imp-months").innerHTML = srcs.length ? `<p>📅 ${esc(srcs.length === 1 ? "Il foglio non ha le date: metto le spese al 1° del mese." : "I fogli non hanno le date: metto le spese al 1° del mese.")}</p>`
+    + srcs.map((x) => {
+      const opts = Array.from({ length: 37 }, (_, k) => { const d = new Date(new Date().getFullYear(), new Date().getMonth() - 24 + k, 1); return d; })
+        .map((d) => { const v = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          return `<option value="${v}" ${v === x.month ? "selected" : ""}>${esc(d.toLocaleDateString(LOCALE, { month: "long", year: "numeric" }))}</option>`; }).join("");
+      return `<label class="field"><span>${esc(x.src)}<small>${x.count} ${x.count === 1 ? "spesa" : "spese"}${x.guess ? "" : " · mese non trovato nel nome"}</small></span>
+        <select data-src="${esc(x.src)}">${opts}</select></label>`;
+    }).join("") : "";
 
   const byMonth = {};
   items.forEach((it) => (byMonth[it.date.slice(0, 7)] ||= []).push(it));
@@ -2385,7 +2397,7 @@ function impRow(it) {
     <label class="imp-check"><input type="checkbox" ${it.on ? "checked" : ""} ${it.blocked ? "disabled" : ""}></label>
     <div class="imp-main">
       <input class="imp-desc" value="${esc(it.description)}" aria-label="Descrizione">
-      <small>${fmtDay(it.date)}${it.original.trim().toLowerCase() !== it.description.trim().toLowerCase() ? " · " + esc(it.original.slice(0, 60)) : ""}</small>
+      <small>${fmtDay(it.date)}${it.original.trim().toLowerCase() !== it.description.trim().toLowerCase() ? " · " + esc(it.original.slice(0, 60)) : ""}${it.source_category ? " · nel foglio: " + esc(it.source_category) : ""}${it.note ? " · " + esc(it.note) : ""}</small>
       ${tag}
       <select class="imp-cat" aria-label="Categoria">${opts}</select>
     </div>
@@ -2420,6 +2432,24 @@ $("imp-list").addEventListener("input", (e) => {
   if (!e.target.classList.contains("imp-desc")) return;
   imp.items[+e.target.closest("li[data-i]").dataset.i].description = e.target.value;
 });
+$("imp-months").addEventListener("change", async (e) => {
+  const sel = e.target.closest("select[data-src]"); if (!sel || !imp?.file) return;
+  imp.file.months[sel.dataset.src] = sel.value;
+  sel.disabled = true;
+  try {
+    const res = await api("/api/import/parse", { method: "POST", body: imp.file });
+    const key = (x) => `${x.src || ""}|${x.original}|${x.amount}`;
+    const was = new Map(imp.items.map((x) => [key(x), x]));
+    res.items.forEach((it) => {  // tengo le scelte già fatte (casella, nome, categoria)
+      const old = was.get(key(it));
+      if (old) Object.assign(it, { on: old.blocked || old.duplicate ? !it.duplicate && !it.blocked : old.on && !it.blocked,
+        description: old.description, category: old.category, new: old.new });
+      else it.on = !it.duplicate && !it.blocked;
+    });
+    imp = { ...res, file: imp.file };
+    renderImport();
+  } catch (err) { toast(failMsg(err)); sel.disabled = false; }
+});
 $("imp-all").addEventListener("click", () => { imp.items.forEach((x) => { x.on = !x.blocked; }); renderImport(); });
 $("imp-none").addEventListener("click", () => { imp.items.forEach((x) => { x.on = false; }); renderImport(); });
 $("imp-other").addEventListener("click", () => { imp = null; loadImport(); });
@@ -2431,7 +2461,9 @@ async function saveImport() {
   try {
     const r = await api("/api/import/save", { method: "POST", body: { items: sel.map((x) => ({
       date: x.date, description: x.description.trim(), amount: x.amount, category: x.category,
-      note: "Da estratto conto" + (x.original.trim().toLowerCase() !== x.description.trim().toLowerCase() ? " · " + x.original.slice(0, 80) : "") })) } });
+      note: (imp.kind === "table" ? `Da ${imp.file?.filename || "foglio"}` : "Da estratto conto")
+        + (x.original.trim().toLowerCase() !== x.description.trim().toLowerCase() ? " · " + x.original.slice(0, 160) : "")
+        + (x.note ? " · " + x.note : "") })) } });
     toast(`✓ ${r.count} spese aggiunte (${r.sheets.join(", ")})`);
     imp = null;
     refresh();

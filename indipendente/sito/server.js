@@ -381,6 +381,34 @@ function applySubscriptions() {
   return added;
 }
 
+// ---------- import: categoria proposta (come _import_category in main.py) ----------
+const SHEET_SYNONYMS = { cibo: ["Spesa"], alimentari: ["Spesa"], supermercato: ["Spesa"], groceries: ["Spesa"], food: ["Spesa"],
+  lebensmittel: ["Spesa"], ristorante: ["Mensa", "Ristoranti"], ristoranti: ["Mensa", "Ristoranti"], mensa: ["Mensa"],
+  restaurant: ["Mensa", "Ristoranti"], vestiti: ["Abbigliamento"], abiti: ["Abbigliamento"], clothes: ["Abbigliamento"],
+  kleidung: ["Abbigliamento"], extra: ["Varie"], altro: ["Varie"], altre: ["Varie"], other: ["Varie"], misc: ["Varie"],
+  sonstiges: ["Varie"], divertimento: ["Svago"], fun: ["Svago"], freizeit: ["Svago"], viaggi: ["Viaggi"], viaggio: ["Viaggi"],
+  travel: ["Viaggi"], reisen: ["Viaggi"], trasporti: ["Trasporti"], trasporto: ["Trasporti"], transport: ["Trasporti"],
+  "cura personale": ["Cura personale", "Salute"], salute: ["Salute"], health: ["Salute"], affitto: ["Affitto"], rent: ["Affitto"],
+  miete: ["Affitto"], regali: ["Regali"], gifts: ["Regali"], abbonamenti: ["Abbonamenti"], subscriptions: ["Abbonamenti"],
+  bollette: ["Bollette", "Casa"], casa: ["Casa"] };
+function importCategory(it, known) {
+  const src = String(it.source_category || "").trim();
+  if (src) { const c = canonical(src, known); if (c) return { category: c, new: false, score: 1 }; }
+  const parts = src ? src.split(/[/,&+]| e | and | und /).map((x) => x.trim().replace(/\s+(ecc|etc|usw)\.?$|\s*(…|\.\.\.)$/i, "")).filter(Boolean) : [];
+  let top = suggest(it.description, known).suggestions[0] || null;
+  if (top && !top.new && (top.score >= 0.9 || (top.source === "storico" && top.score >= 0.75))) return top;
+  for (const part of parts) {
+    for (const name of [part, ...(SHEET_SYNONYMS[cf(part)] || [])]) { const c = canonical(name, known); if (c) return { category: c, new: false, score: 0.95 }; }
+  }
+  if (src && (!top || top.score < 0.75)) {
+    for (const part of parts) {
+      const alt = suggest(part, known).suggestions[0];
+      if (alt && !alt.new && (!top || top.new || alt.score > top.score)) top = { ...alt, score: Math.min(alt.score, 0.79) };
+    }
+  }
+  return top;
+}
+
 // ---------- pagamenti che si ripetono (come server/recurring.py) ----------
 function repSeries(r, max = 2000) {
   const [y0, m0, d0] = r.start.split("-").map(Number), out = [];
@@ -833,19 +861,19 @@ const routes = {
   },
 
   "POST /api/import/parse": async (q, b) => {
-    const parsed = await window.SpeseImport.parse(b.filename, b.data);
+    const parsed = await window.SpeseImport.parse(b.filename, b.data, b.months);
     const existing = db().expenses;
     const keys = monthKeys();
     const first = keys[0];
     const known = catNames();
     const items = parsed.items.map((it, i) => {
       const dup = existing.find((t) => Math.abs(t.amount - it.amount) < 0.005 && Math.abs(new Date(t.date) - new Date(it.date)) <= 2 * 864e5);
-      const top = suggest(it.description, known).suggestions[0];
+      const top = importCategory(it, known);
       return { ...it, i, blocked: keyOf(it.date) < first && db().expenses.length ? "Prima dell'inizio del budget" : null,
         duplicate: dup ? `${dup.description} (${dup.trip ? "✈️ " + dup.trip : labelOf(keyOf(dup.date), keys)})` : null,
         category: top?.category || null, new: !!top?.new, score: top ? top.score : 0 };
     });
-    return { items, income: parsed.income, categories: known };
+    return { items, income: parsed.income, categories: known, sources: parsed.sources || [], kind: parsed.kind || "bank" };
   },
   "POST /api/import/save": (q, b) => {
     const sheets = new Set();

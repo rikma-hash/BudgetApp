@@ -12,8 +12,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=47">
-<link rel="stylesheet" href="extra.css?v=928175b9">
+<link rel="stylesheet" href="style.css?v=48">
+<link rel="stylesheet" href="extra.css?v=9c7acb45">
 <script>
   try {
     const p = JSON.parse(localStorage.getItem("prefs") || "{}");
@@ -24,7 +24,7 @@
   } catch {}
 </script>
 </head>
-<body data-app="app.js?v=47">
+<body data-app="app.js?v=48">
 <!-- accesso (versione indipendente): si vede solo finché non si è entrati -->
 <section class="login-screen" id="login" hidden>
   <div class="login-wrap">
@@ -266,21 +266,23 @@
     <header class="page-head">
       <button class="text-btn" type="button" data-go="history">‹ Storico</button>
       <h1>Importa spese</h1>
-      <p class="sub">Dall'estratto conto della banca o dai movimenti della carta.</p>
+      <p class="sub">Dall'estratto conto della banca, dai movimenti della carta o da un tuo foglio di calcolo.</p>
     </header>
     <div class="card" id="imp-start">
       <ol class="how-list">
-        <li>Nell'app della banca o della carta scarica i movimenti in <b>CSV</b> (va meglio) oppure in <b>PDF</b>.</li>
+        <li>Nell'app della banca o della carta scarica i movimenti in <b>CSV</b> (va meglio), <b>PDF</b>, <b>OFX</b> o <b>QIF</b>.
+          Oppure usa un tuo foglio delle spese: <b>Excel</b>, <b>Numbers</b>, <b>Google Fogli</b> (File › Scarica › Excel o ODS) o LibreOffice.</li>
         <li>Salvalo in File: <i>Condividi › Salva su File</i>.</li>
         <li>Sceglilo qui sotto: ti mostro le spese con la categoria già proposta, tu controlli e confermi.</li>
       </ol>
-      <label class="primary big file-btn">📄 Scegli il file<input type="file" id="imp-file" accept=".csv,.pdf,.txt,text/csv,application/pdf"></label>
+      <label class="primary big file-btn">📄 Scegli il file<input type="file" id="imp-file"></label>
       <p class="hint center" id="imp-status"></p>
     </div>
     <div id="imp-review" class="stack" hidden>
       <div class="card">
         <div class="summary-line" id="imp-summary"></div>
         <p class="hint" id="imp-note"></p>
+        <div id="imp-months" class="imp-months" hidden></div>
         <div class="imp-tools"><button type="button" class="text-btn" id="imp-all">Seleziona tutte</button>
           <button type="button" class="text-btn" id="imp-none">Nessuna</button>
           <button type="button" class="text-btn" id="imp-other">Altro file</button></div>
@@ -667,14 +669,14 @@
 </dialog>
 
 <div id="toast" role="status"></div>
-<script src="i18n.js?v=47"></script>
-<script src="config.js?v=928175b9"></script>
+<script src="i18n.js?v=48"></script>
+<script src="config.js?v=9c7acb45"></script>
 <script src="vendor/supabase.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="store.js?v=928175b9"></script>
-<script src="server.js?v=928175b9"></script>
-<script src="excel.js?v=928175b9"></script>
-<script src="importer.js?v=928175b9"></script>
-<script src="login.js?v=928175b9"></script>
+<script src="store.js?v=9c7acb45"></script>
+<script src="server.js?v=9c7acb45"></script>
+<script src="excel.js?v=9c7acb45"></script>
+<script src="importer.js?v=9c7acb45"></script>
+<script src="login.js?v=9c7acb45"></script>
 </body>
 </html>
