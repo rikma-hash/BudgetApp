@@ -12,7 +12,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/style.css?v=44">
+<link rel="stylesheet" href="/static/style.css?v=45">
 <script>
   try {
     const p = JSON.parse(localStorage.getItem("prefs") || "{}");
@@ -59,7 +59,7 @@
 
 <div class="cols"><div class="col">
     <div class="hero card" id="hero"></div>
-    <div class="alerts" id="home-alerts" hidden></div>
+    <ul class="alerts" id="home-alerts" hidden></ul>
     <div class="excl" id="home-excl"></div>
 
     <div class="card">
@@ -435,6 +435,34 @@
   </form>
 </dialog>
 
+<dialog id="txdlg" class="small-dialog tx-dialog" aria-labelledby="tx-desc">
+  <div class="sheet-head">
+    <button type="button" class="text-btn" id="tx-edit">Modifica</button>
+    <span></span>
+    <button type="button" class="text-btn danger" id="tx-delete">Elimina</button>
+  </div>
+  <div class="tx-detail">
+    <span class="emoji" id="tx-emoji"></span>
+    <h3 id="tx-desc"></h3>
+    <div class="tx-amount" id="tx-amount"></div>
+    <p class="hint" id="tx-meta"></p>
+  </div>
+  <textarea id="tx-note" rows="5" placeholder="Note" aria-label="Note"></textarea>
+  <button type="button" class="primary" id="tx-close">Chiudi</button>
+</dialog>
+
+<dialog id="ntdlg" class="small-dialog">
+  <form method="dialog">
+    <h3>Nuovo viaggio</h3>
+    <p class="hint">Lo creo con le categorie di sempre (trasporto, alloggio, cibo…): il budget lo metti dopo, in Viaggi.</p>
+    <input id="nt-name" class="desc" placeholder="Nome del viaggio" maxlength="28" autocomplete="off">
+    <div class="dlg-actions">
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Crea</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirm" class="small-dialog">
   <form method="dialog">
     <h3 id="confirm-title">Sei sicuro?</h3>
@@ -547,7 +575,7 @@
 </dialog>
 
 <div id="toast" role="status"></div>
-<script src="/static/i18n.js?v=44"></script>
-<script src="/static/app.js?v=44"></script>
+<script src="/static/i18n.js?v=45"></script>
+<script src="/static/app.js?v=45"></script>
 </body>
 </html>

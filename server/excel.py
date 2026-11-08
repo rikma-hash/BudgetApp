@@ -370,6 +370,45 @@ def ensure_month(wb: openpyxl.Workbook, day: dt.date) -> tuple[Worksheet, bool]:
     return ws, True
 
 
+def _add_months(day: dt.date, n: int) -> dt.date:
+    m = day.month - 1 + n
+    return dt.date(day.year + m // 12, m % 12 + 1, 1)
+
+
+def next_month_day(wb: openpyxl.Workbook, today: dt.date | None = None) -> dt.date:
+    """Primo giorno del mese che viene dopo l'ultimo foglio mese (per "＋ Aggiungi mese").
+
+    I fogli mese sono in ordine: parto da un foglio di cui conosco l'anno (una data dentro, o quello in corso)
+    e vado avanti un mese alla volta finché il nome corrisponde."""
+    today = today or dt.date.today()
+    sheets = month_sheets(wb)
+    if not sheets:
+        return _add_months(today, 1)
+    anchor_i, anchor = None, None
+    cur = sheet_for(wb, today)
+    for i in range(len(sheets) - 1, -1, -1):
+        if sheets[i] is cur:
+            anchor_i, anchor = i, today.replace(day=1)
+            break
+        dates = _sheet_dates(sheets[i])
+        if dates:
+            d = max(dates)
+            anchor_i, anchor = i, d.replace(day=1)
+            break
+    if anchor is None:  # nessuna data da nessuna parte: il primo foglio è il mese col suo nome più vicino a oggi
+        name = sheets[0].title.split()[0]
+        m = MONTHS.index(name) + 1 if name in MONTHS else today.month
+        anchor_i, anchor = 0, dt.date(today.year if m >= today.month - 6 else today.year + 1, m, 1)
+    day = anchor
+    for ws in sheets[anchor_i + 1:]:
+        name = ws.title.split()[0]
+        for _ in range(12):
+            day = _add_months(day, 1)
+            if name not in MONTHS or MONTHS[day.month - 1] == name:
+                break
+    return _add_months(day, 1)
+
+
 # ---------- transazioni ----------
 
 def append_expense(wb: openpyxl.Workbook, day: dt.date, description: str, amount: float,

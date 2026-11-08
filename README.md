@@ -1,42 +1,55 @@
-# BudgetApp
+# 💶 Spese
 
-👉 **Per installarla passo passo: [GUIDA.md](GUIDA.md)** (dopo si aggiorna da sola dal ramo `stabile`) (Mac: `bash installa-mac.sh` · Windows: `installa-windows.ps1`).
+Un'app per segnare le spese dall'iPhone in pochi secondi e tenere il budget del mese sotto controllo:
+categoria suggerita, piano del budget, risparmi e consigli, viaggi, rate su più mesi, abbonamenti,
+import dell'estratto conto (CSV/PDF), italiano e inglese.
 
-Mini-app delle spese (iPhone + Mac) che scrive in un file Excel del budget su iCloud: registrazione rapida con
-categoria suggerita, piano del budget, risparmi e consigli, viaggi, rate su più mesi, import dell'estratto conto
-(CSV/PDF), italiano/inglese.
+<p>
+<img src="docs/immagini/1-home.jpg" width="230" alt="Home dell'app">
+<img src="docs/immagini/2-nuova-spesa.jpg" width="230" alt="Nuova spesa">
+<img src="docs/immagini/3-piano.jpg" width="230" alt="Piano del budget">
+</p>
 
-Il file Excel è l'unica fonte dei dati e **non è in questo repository** (vedi `.gitignore`): qui c'è solo il codice
-e un modello vuoto.
+## Due modi per usarla
 
-## Installazione da zero (Mac)
-1. Installa [uv](https://docs.astral.sh/uv/) (porta con sé Python).
-2. Copia il modello vuoto dove vuoi tenere il budget, per esempio su iCloud Drive:
-   `cp modello/Budget_Tracker_vuoto.xlsx ~/Library/Mobile\ Documents/com~apple~CloudDocs/Budget.xlsx`
-3. Prova l'app:
-   `BUDGET_XLSX=<percorso del file> ~/.local/bin/uv run uvicorn server.main:app --host 127.0.0.1 --port 8765`
-   e apri http://127.0.0.1:8765 (alla prima spesa l'app crea il foglio del mese).
-4. Avvio automatico: copia `launchd/com.budgetapp.server.plist.example` in `~/Library/LaunchAgents/com.budgetapp.server.plist`,
-   sostituisci `__HOME__` e il percorso del file, poi `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.budgetapp.server.plist`.
-5. iPhone: installa Tailscale su Mac e iPhone, apri `http://<IP Tailscale del Mac>:8765` in Safari → Condividi → Aggiungi alla schermata Home.
+L'app è la stessa; cambia dove stanno i dati.
 
-## Variabili
-- `BUDGET_XLSX`: percorso del file Excel
-- `BUDGET_DATA`, `BUDGET_BACKUPS`: cartelle dei dati dell'app e dei backup (default `data/`, `backups/`)
-- `BUDGET_AI`: `cli` (Claude Code con l'abbonamento, default), `api` (serve `ANTHROPIC_API_KEY`), `off`
+| | 📱 **Solo app** (online) | 💻 **Con il tuo computer** |
+|---|---|---|
+| Cosa installi | niente: un link, poi *Aggiungi alla schermata Home* | l'app sul computer (Mac o Windows) + Tailscale |
+| Dove stanno i dati | in un database online (Supabase), con il tuo account | in **un tuo file Excel**, sul tuo computer o iCloud/OneDrive |
+| Computer acceso | non serve | serve per salvare (a computer spento le spese aspettano sul telefono) |
+| Excel | lo scarichi quando vuoi; puoi importare quello che hai già | è il file stesso: lo apri e lo modifichi quando vuoi |
+| Tempo per partire | 1 minuto | circa 15 minuti |
+| Consigli scritti da Claude | no | sì, se hai Claude Code |
 
-## File personali facoltativi (in `data/`, mai su GitHub)
-- `data/keywords_local.json`: parole chiave tue, es. `{"Mensa": ["nome della tua mensa"]}`
-- `data/contesto.txt`: una frase su di te per i consigli di Claude (es. "una persona che vive da sola in affitto")
+### 📱 Solo app
+1. Chiedi il link a chi ti ha dato accesso a questa pagina.
+2. Aprilo in Safari sull'iPhone → **Condividi** → **Aggiungi alla schermata Home**.
+3. Apri l'icona e tocca **Crea un account nuovo** (email e password). Hai già un file Excel di questa app? In
+   ⚙️ Impostazioni › **Importa dal vecchio Excel**.
 
-## Cartelle
-- `server/` – API (FastAPI), lettura/scrittura Excel, suggerimenti, consigli, import estratti conto
-- `web/` – l'app (installabile su iPhone), `i18n.js` per l'inglese
-- `scripts/` – manutenzione: `migrate_template.py`, `add_months.py`, `setup_trips.py`, `make_blank.py` (rigenera il modello vuoto)
-- `modello/` – file Excel vuoto da cui partire
-- `brain/` – documentazione completa del progetto (per chi ci lavora, anche Claude)
-- `backups/` – copie di sicurezza del file Excel (create dall'app, mai su GitHub): prima di ogni scrittura, una al giorno, una al mese
+> **Da sapere:** i dati stanno nel database di chi gestisce il link. Ognuno vede solo i suoi, protetti da email e
+> password, ma chi gestisce il database potrebbe tecnicamente vederli. Se preferisci che restino solo tuoi, usa
+> l'altro modo.
 
-## Licenza
-[Uso personale](LICENSE): puoi scaricarla, installarla e usarla gratis per le tue spese. **Non** puoi modificarla,
-ridistribuirla modificata né venderla senza permesso. È fornita così com'è, senza garanzie.
+### 💻 Con il tuo computer
+Segui **[GUIDA.md](GUIDA.md)**: passo passo, con le immagini. Dopo si aggiorna da sola.
+
+---
+
+<details>
+<summary><b>Per chi sviluppa</b> (struttura del progetto)</summary>
+
+- `server/` – il "cervello" della versione con il computer: API (FastAPI) che legge e scrive il file Excel, suggerimenti, consigli, import estratti conto
+- `web/` – l'interfaccia (la stessa nelle due versioni), `i18n.js` per l'inglese
+- `scripts/` – manutenzione del file Excel; `modello/` – il file Excel vuoto da cui partire
+- `installa-mac.sh`, `installa-windows.ps1`, `avvia.py`, `launchd/` – installazione e avvio automatico
+- La versione **solo app** è nel ramo [`prova-supabase`](../../tree/prova-supabase/indipendente): stessa interfaccia di `web/`, con un piccolo "server nel telefono" al posto di `server/` e i dati su Supabase.
+- `brain/` e `CLAUDE.md` – appunti di lavoro per l'assistente (Claude) che sviluppa l'app: si possono ignorare.
+
+Variabili della versione con il computer: `BUDGET_XLSX` (file Excel), `BUDGET_DATA`, `BUDGET_BACKUPS` (cartelle di dati e copie di sicurezza), `BUDGET_AI` (`cli`, `api`, `off`).
+File personali facoltativi, mai su GitHub: `data/keywords_local.json` (parole chiave tue), `data/contesto.txt` (una frase su di te per i consigli).
+</details>
+
+Licenza: [uso personale](LICENSE) – gratis per le tue spese, senza modificarla né ridistribuirla.

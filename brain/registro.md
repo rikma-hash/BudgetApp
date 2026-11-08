@@ -154,3 +154,19 @@
 ## 2026-11-06 · Controllo di sicurezza della versione indipendente
 - Verificato da fuori (senza account) database, sito e GitHub: nessuna fuga possibile senza login; dettagli in `07-indipendente.md` › Sicurezza.
 - Aggiunte intestazioni di sicurezza al sito (`vercel.json`) e pulizia dei dati del vecchio account sul dispositivo quando ne entra un altro (`clearAccountData`). Tolto il `vercel.json` interno a `sito/` (era servito pubblicamente, innocuo).
+
+## 2026-11-06 · Pagina GitHub (README) con le due strade
+- Dopo il feedback esterno: README riscritto in breve con immagini e tabella **📱 Solo app** (link + account, dati su Supabase) / **💻 Con il tuo computer** (GUIDA.md, file Excel). Avviso onesto: con la versione solo app i dati stanno nel database di chi gestisce il link.
+- Struttura del progetto, variabili e `brain/` spostati in un riquadro chiuso "Per chi sviluppa" (GitHub non permette di nascondere una cartella). Il link all'app online **non** è nel README (è in `privato.md`): gli amici lo chiedono all'utente.
+- Licenza "uso personale" **tenuta** (scelta dell'utente del 3/11), ridotta a una riga in fondo.
+
+## 2026-11-08 · Note, spese a Mac spento nei totali, mesi dopo luglio, avvisi da scorrere, budget con la virgola
+- Richieste dell'utente per **tutte e tre le versioni** (sua app, amici, online).
+- **Scheda della spesa**: tocco → note (colonna F) con Modifica a sinistra ed Elimina a destra; le note si salvano chiudendo.
+- **Mac spento**: le spese in coda contano subito in totali, categorie, settimana, Storico mese/anno e viaggio (`queuedIn`/`withQueued`).
+- **＋ Mese** nelle pillole di Storico e Piano (`POST /api/months/add`, `X.next_month_day`): provato su copia, Luglio → Agosto → "Settembre 2027".
+- **Avvisi della Home**: scorri a sinistra e spariscono (× sul Mac); tornano solo se peggiorano.
+- **Budget con la virgola**: già salvati giusti, ora si vedono con i centesimi (`eurB` al posto di `eur0` per i budget).
+- **＋**: "Dove la registro?" sempre visibile con **✈️ Nuovo viaggio…**.
+- **Parole chiave**: da 680 a ~2.050, nuove categorie Affitto, Università, Animali; tolte parole ambigue (es. "max", "now", "tua", "poco", "amazon" in Casa); **a parità vince la parola più lunga** (`suggest.py` e `localSuggest`: "carnet" non va più in Spesa per "carne").
+- Versione cache 44 → 45. Provato su copia (`test/rete`) a 390 px.

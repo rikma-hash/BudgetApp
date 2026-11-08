@@ -603,3 +603,28 @@ body.has-plan-bar { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .cat-avail.neg { color: var(--bad); font-weight: 600; }
 .meta .neg { color: var(--bad); }
 .hero .meta span { font-variant-numeric: tabular-nums; }
+
+/* ---- scheda della spesa (tocco su una spesa): Modifica · Elimina · note ---- */
+.tx-dialog { display: none; }
+.tx-dialog[open] { display: grid; gap: 14px; }
+.tx-dialog .sheet-head { position: static; margin: -6px 0 0; padding: 0; background: transparent; }
+.tx-detail { display: grid; justify-items: center; text-align: center; gap: 4px; }
+.tx-detail .emoji { width: 52px; height: 52px; font-size: 26px; }
+.tx-detail h3 { margin: 6px 0 0; font-size: 19px; overflow-wrap: anywhere; }
+.tx-amount { font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+.tx-detail .hint { margin: 0; }
+#tx-note { font: inherit; font-size: 16px; width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; padding: 12px;
+  border: 0; border-radius: 14px; background: var(--soft); color: var(--ink); }
+#tx-note::placeholder { color: var(--muted); }
+
+
+/* ---- avvisi della Home: scorri a sinistra per toglierli (× sul Mac) ---- */
+.alerts { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+.alerts li { position: relative; transition: transform .2s ease, opacity .2s ease; }
+.alerts li .swipe-del { border-radius: 16px; }
+.alert-row { cursor: pointer; }
+.alert-x { display: none; font-size: 20px; line-height: 1; color: var(--muted); padding: 2px 6px; }
+@media (hover: hover) and (pointer: fine) { .alert-x { display: block; } .alert-row > i { display: none; } }
+.pills .add-month { border: 1.5px dashed var(--line, var(--muted)); background: transparent; color: var(--accent); font-weight: 600; }
+.tx-dialog .sheet-head .text-btn:first-child { justify-self: start; }
+.tx-dialog .sheet-head .text-btn:last-child { justify-self: end; }
