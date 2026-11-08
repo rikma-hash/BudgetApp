@@ -156,3 +156,11 @@
 - Versione cache 44 → 45. Provato su copia (`test/rete`) a 390 px.
 - Pubblicato per gli amici (`main` → `stabile`, dddd28a): si aggiornano da soli entro 6 ore.
 - Correzione: "✈️ Nuovo viaggio…" nel ＋ risultava scelto (verde) insieme a "Spesa del mese". Web v46.
+
+## 2026-11-08 · Pagamenti che si ripetono (v47, tutte e tre le versioni)
+- Richiesta: segnare un pagamento che si ripete con personalizzazione tipo calendario (es. una tassa ogni 3 mesi da una data, con fine). Scelta dell'utente: **entra da solo nel giorno giusto** (come gli abbonamenti), nei mesi futuri si vede come "previsto".
+- ＋ › **Si ripete** (pillole + Personalizza…), regole in `data/recurring.json` (`server/recurring.py`), inserimento automatico nel worker, previsti nello Storico, elenco in Budget › Categorie con modifica/Ferma. Inglese in `i18n.js`.
+- Online: stesse API in `indipendente/src/server.js` (`settings.recurring`, `applyRecurring` all'avvio e ogni 30 min con gli abbonamenti).
+- Provato su copia (8766) e in demo (8768) a 390 px: date passate inserite subito, previsti, modifica, Ferma, inglese.
+- In attesa: l'esempio di Excel "letto in altri modi" (l'utente lo manda dopo) e l'import di altri formati (CSV, Numbers, ODS/Google Fogli, OFX/QIF).
+
