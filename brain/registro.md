@@ -164,3 +164,9 @@
 - Provato su copia (8766) e in demo (8768) a 390 px: date passate inserite subito, previsti, modifica, Ferma, inglese.
 - In attesa: l'esempio di Excel "letto in altri modi" (l'utente lo manda dopo) e l'import di altri formati (CSV, Numbers, ODS/Google Fogli, OFX/QIF).
 
+## 2026-11-08 · Import da Excel, Numbers, Google Fogli, OFX, QIF (v48, tutte e tre le versioni)
+- Richiesta: importare altri formati oltre Excel e leggere anche Excel fatti in altri modi; esempio dell'utente: un file Numbers "a matrice" senza date (dettagli in `privato.md`).
+- Scelte dell'utente: senza date → **1° del mese** (mese dal nome della tabella, modificabile); le celle fuori tabella (un'entrata) non si importano.
+- Mac: `importer.parse_any` + `parse_table`, dipendenza nuova `numbers-parser` (pyproject/uv.lock), `_import_category` + `SHEET_SYNONYMS` in main.py. Web: campo file senza `accept`, menu del mese, nota con nome file. Online: stessa logica in `indipendente/src/importer.js` con SheetJS (legge anche .xls); con SheetJS il nome della tabella di Numbers non arriva (solo il nome del foglio) → mese da scegliere.
+- Provato su copia (8766) e demo (8768) a 390 px col file dell'utente e con file di prova xlsx, CSV a matrice, ODS, OFX, QIF.
+
