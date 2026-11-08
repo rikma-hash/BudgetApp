@@ -170,3 +170,5 @@
 - Mac: `importer.parse_any` + `parse_table`, dipendenza nuova `numbers-parser` (pyproject/uv.lock), `_import_category` + `SHEET_SYNONYMS` in main.py. Web: campo file senza `accept`, menu del mese, nota con nome file. Online: stessa logica in `indipendente/src/importer.js` con SheetJS (legge anche .xls); con SheetJS il nome della tabella di Numbers non arriva (solo il nome del foglio) → mese da scegliere.
 - Provato su copia (8766) e demo (8768) a 390 px col file dell'utente e con file di prova xlsx, CSV a matrice, ODS, OFX, QIF.
 
+
+- Pubblicato per gli amici (`stabile` = a67f732): pagamenti che si ripetono (v47) e import da fogli/altri formati (v48).
