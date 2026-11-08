@@ -29,7 +29,7 @@ Altri file: `config.js` (indirizzo e chiave pubblica di Supabase), `supabase/sch
 ## Collegarla a Supabase (una volta sola)
 1. **supabase.com** → account → **New project** (regione *Central EU (Frankfurt)*; la password del database tienila per te).
    Nella creazione: *Enable Data API* sì, *Automatically expose new tables* no, *Enable automatic RLS* sì.
-2. **SQL Editor** → incolla tutto `supabase/schema.sql` → **Run**. Rilancialo quando cambia (non cancella dati).
+2. **SQL Editor** → incolla tutto `supabase/schema.sql` → **Run**. Rilancialo quando cambia (non cancella dati). Contiene anche la funzione `delete_my_account` per **Impostazioni › Elimina il mio account** (senza, il pulsante dice "Eliminazione non ancora attiva").
 3. **Authentication › Sign In / Providers › Email**: attivo; togli *Confirm email* se non vuoi l'email di conferma.
 4. **Project Settings › API Keys**: *Project URL* e chiave *publishable* (o *anon*) in `config.js`. Mai la chiave *secret*.
 

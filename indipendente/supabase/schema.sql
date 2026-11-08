@@ -97,3 +97,15 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ---------- eliminare il proprio account (Impostazioni › Elimina il mio account) ----------
+-- Cancella l'utente che ha fatto l'accesso e, a cascata, tutti i suoi dati. Solo il proprio: usa auth.uid().
+create or replace function public.delete_my_account() returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is null then raise exception 'Serve l''accesso'; end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;

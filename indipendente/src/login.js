@@ -67,6 +67,7 @@ function renderAccount() {
        <p class="${n ? "warn" : "ok-line"}">${n ? `⏳ ${n} ${n === 1 ? "modifica" : "modifiche"} ancora sul telefono: ${Store.lastError === "offline" ? "partono appena c'è connessione" : "le sto mandando"}.` : "✓ Tutto salvato online: lo vedi anche dagli altri dispositivi."}</p>`
     : `<p>Stai usando l'app <b>senza account</b>: i dati sono solo in questo browser. Scarica ogni tanto l'Excel per non perderli.</p>`;
   $("acc-logout").textContent = Store.mode === "cloud" ? "Esci dall'account" : "Torna alla schermata di accesso";
+  if ($("acc-delete-box")) $("acc-delete-box").hidden = Store.mode !== "cloud";
   const pill = $("sync-pill");
   if (pill) { pill.hidden = !n || Store.mode !== "cloud"; pill.textContent = `⏳ ${n} da sincronizzare`; }
 }
@@ -87,6 +88,12 @@ document.addEventListener("click", async (e) => {
   else if (id === "acc-wipe") {
     if (!(await askConfirm("Cancella tutti i dati", "Spese, budget, viaggi, abbonamenti e categorie di questo account spariscono per sempre. Scarica prima l'Excel se vuoi tenerne una copia.", "Cancella tutto"))) return;
     Store.wipe(); say("Dati cancellati"); location.hash = "home"; location.reload();
+  } else if (id === "acc-delete") {
+    if (!(await askConfirm("Eliminare l'account?", `L'account ${Store.user?.email || ""} e tutti i suoi dati (spese, budget, viaggi) spariscono per sempre, anche dagli altri dispositivi. Scarica prima l'Excel se vuoi tenerne una copia.`, "Continua"))) return;
+    if (!(await askConfirm("Sei sicuro?", "Non si può tornare indietro.", null))) return;   // seconda conferma, rossa
+    try { await Store.deleteAccount(); } catch (err) { return say(err.message); }
+    say("Account eliminato");
+    location.hash = ""; location.reload();
   } else if (id === "imp-x-replace" || id === "imp-x-add") {
     const replace = id === "imp-x-replace";
     if (replace && Store.db.expenses.length && !(await askConfirm("Sostituisci i dati", `Le ${Store.db.expenses.length} spese che ci sono adesso verranno sostituite da quelle del file.`, "Sostituisci"))) return;

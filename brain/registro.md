@@ -170,3 +170,8 @@
 - **＋**: "Dove la registro?" sempre visibile con **✈️ Nuovo viaggio…**.
 - **Parole chiave**: da 680 a ~2.050, nuove categorie Affitto, Università, Animali; tolte parole ambigue (es. "max", "now", "tua", "poco", "amazon" in Casa); **a parità vince la parola più lunga** (`suggest.py` e `localSuggest`: "carnet" non va più in Spesa per "carne").
 - Versione cache 44 → 45. Provato su copia (`test/rete`) a 390 px.
+
+## 2026-11-08 · Versione online: stesse novità + elimina account + Viaggi sempre
+- Merge di `main` (note, spese a Mac spento, ＋ Mese, avvisi da scorrere, budget con la virgola, nuovo viaggio dal ＋, parole chiave) e porting in `src/server.js` (`POST /api/months/add`, parola chiave più lunga vince).
+- Nuovo: **Elimina il mio account** (funzione `delete_my_account` in `schema.sql`, da lanciare nel SQL Editor) e categoria **Viaggi** sempre presente.
+- Provato in locale (porta 8768, senza account) a 390 px: nota salvata, budget 50,50 €, avviso, Dicembre aggiunto, viaggio creato dal ＋, Viaggi rimessa da sola.

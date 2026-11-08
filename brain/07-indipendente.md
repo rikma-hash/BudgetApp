@@ -14,6 +14,10 @@ Istruzioni complete: `indipendente/LEGGIMI.md`. Progetto Supabase dell'utente: i
 - **`src/store.js`**: `db` = tabelle come elenchi; `commit()` confronta con `snap` (ultima versione nota del database) e mette upsert/delete in `outbox` (localStorage), che parte subito o quando torna la rete. `refresh()` scarica tutto solo se la coda è vuota. Upsert: `onConflict` = `user_id` + chiave, **tranne `expenses` (chiave = solo `id`)**: sbagliarlo fa rifiutare tutte le spese (errore 42P10, successo il 6/11).
 - Librerie in `vendor/` (supabase-js 2.45.4, SheetJS 0.20.3), servite dal sito; pdf.js si carica da cdnjs solo per i PDF.
 
+- **Categoria Viaggi sempre presente** (8/11): `ensureViaggi()` all'avvio (dentro `applySubscriptions`), alla creazione di un viaggio e all'import dell'Excel.
+- **＋ Mese** (8/11): `POST /api/months/add` = mese dopo l'ultimo di `monthKeys()`, creato con `ensureMonth` (entrate e budget dell'ultimo).
+- **Elimina il mio account** (8/11, Impostazioni › Zona pericolosa, solo con account): due conferme → `Store.deleteAccount()` → `rpc("delete_my_account")` (funzione `security definer` in `schema.sql`: cancella `auth.users` dell'utente collegato, i dati vanno via a cascata) → esce e pulisce il dispositivo. **La funzione va creata a mano nel SQL Editor di Supabase** (rilanciare `schema.sql` o solo il pezzo finale).
+
 ## Import del vecchio Excel (`src/excel.js`)
 - Per ogni foglio visibile: riga con "Descrizione" e "Importo"; tabella budget = seconda colonna "Categoria" con accanto "Budget…".
 - Entrate: tabella "💶 ENTRATE DEL MESE" se c'è, altrimenti le cifre in colonna B sopra le spese (nome = etichetta senza "da ricevere:"). Surplus/deficit dalla riga "riportato/surplus/deficit"; contato se la formula del BUDGET TOTALE lo include (le formule senza valore salvato si leggono solo con `sheetStubs: true`, seconda lettura `wbF`).

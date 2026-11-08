@@ -12,6 +12,11 @@ const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July
 const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
 const EXACT = {
+  "Modifica": "Edit", "Note": "Notes", "Chiudi": "Close", "✓ Note salvate": "✓ Notes saved", "Note tolte": "Notes removed", "in attesa del Mac": "waiting for the Mac",
+  "Scegli prima la categoria con Modifica": "First choose the category with Edit", "Togli l'avviso": "Dismiss",
+  "＋ Mese": "＋ Month", "Per aggiungere un mese serve il Mac acceso": "Adding a month needs the Mac on",
+  "Nuovo viaggio": "New trip", "✈️ Nuovo viaggio…": "✈️ New trip…", "Nome del viaggio": "Trip name",
+  "Lo creo con le categorie di sempre (trasporto, alloggio, cibo…): il budget lo metti dopo, in Viaggi.": "I'll create it with the usual categories (transport, lodging, food…): set the budget later, in Trips.",
   // navigazione e titoli
   "Spese": "Expenses", "Ciao!": "Hi!", "Impostazioni": "Settings", "Categorie": "Categories", "Tutto →": "All →",
   "Ultime spese": "Latest expenses", "Storico →": "History →", "Storico": "History", "Importa": "Import", "Excel": "Excel",
@@ -214,6 +219,8 @@ const EXACT = {
 
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
+  [/^✓ Aggiunto (.+): entrate e budget copiati dall'ultimo mese$/, "✓ Added $1: income and budget copied from the last month"],
+  [/^✓ Viaggio (.+) creato$/, "✓ Trip $1 created"],
   [/^Senza (.+) · tocca l'occhio per rimetterl[oi]$/, "Without $1 · tap the eye to count again"],
   [/^Budget di (.+)$/, "$1 budget"],
   [/^In questa categoria ci sono (\d+) (spesa|spese): scegli dove spostarle, poi premi Conferma\.$/, "This category has $1 expense(s): choose where to move them, then press Confirm."],

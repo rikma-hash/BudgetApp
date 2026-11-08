@@ -7,6 +7,8 @@ const APP_VERSION = (document.currentScript?.src.match(/[?&]v=(\d+)/) || [])[1] 
 const $ = (id) => document.getElementById(id);
 const eur = (n) => (n ?? 0).toLocaleString(LOCALE, { style: "currency", currency: "EUR" });
 const eur0 = (n) => (n ?? 0).toLocaleString(LOCALE, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+// budget: senza centesimi se è una cifra tonda, con i centesimi se l'hai scritta con la virgola (es. 12,50)
+const eurB = (n) => (Math.abs((n ?? 0) - Math.round(n ?? 0)) > 0.004 ? eur(n) : eur0(n));
 const MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const sign = (n) => (n < -0.004 ? "neg" : n > 0.004 ? "pos" : "");
@@ -129,7 +131,7 @@ async function revalidate(path) {
 // in ordine e parte appena torna la connessione. Intanto correggo le copie salvate nel telefono (patchOffline), così la
 // modifica si vede subito e non "torna com'era" rientrando. Le spese nuove hanno la loro coda (queue).
 const NO_QUEUE_EXACT = new Set(["/api/expenses", "/api/trips/expense"]);
-const NO_QUEUE_PREFIX = ["/api/suggest", "/api/diag", "/api/advice", "/api/import", "/api/update"];
+const NO_QUEUE_PREFIX = ["/api/months/add", "/api/suggest", "/api/diag", "/api/advice", "/api/import", "/api/update"];
 const queueable = (path) => !NO_QUEUE_EXACT.has(path) && !NO_QUEUE_PREFIX.some((p) => path.startsWith(p));
 const ops = () => store.get("ops", []);
 const setOps = (q) => store.set("ops", q);
@@ -384,6 +386,37 @@ let view = "home";
 const queue = () => store.get("queue", []);
 const setQueue = (q) => store.set("queue", q);
 
+// Spese ancora sul telefono (Mac spento) che cadono nel mese `sheetName`, una per rata se divisa.
+// Servono a far contare subito nei totali quello che hai registrato: quando arrivano al Mac escono dalla coda
+// e i totali veri le contengono già.
+function queuedIn(sheetName) {
+  const out = [];
+  for (const e of queue()) {
+    const n = e.trip ? 1 : Math.max(1, +e.split || 1);
+    const part = r2(e.amount / n);
+    const d0 = new Date(e.date + "T12:00");
+    for (let k = 0; k < n; k++) {
+      const d = new Date(d0.getFullYear(), d0.getMonth() + k, 1, 12);
+      d.setDate(Math.min(d0.getDate(), new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      const name = MONTHS[d.getMonth()];
+      if (sheetName !== name && sheetName !== `${name} ${d.getFullYear()}`) continue;
+      const iso = isoDay(d);
+      out.push({ ...e, orig: e, queued: true, date: iso, week: weekOf(iso),
+        amount: k < n - 1 ? part : r2(e.amount - part * (n - 1)),
+        description: n > 1 ? `${e.description} (${k + 1}/${n})` : e.description,
+        category: e.trip ? "Viaggi" : e.category, note: e.trip ? `✈️ ${e.trip}` + (e.note ? " · " + e.note : "") : e.note });
+    }
+  }
+  return out;
+}
+/** Copia del riepilogo del mese con dentro le spese ancora in coda. */
+function withQueued(sum, list) {
+  if (!sum || !list.length) return sum;
+  const s = JSON.parse(JSON.stringify(sum));
+  list.forEach((t) => adjSummary(s, t.category, t.week, t.amount));
+  return s;
+}
+
 async function refresh() {
   try {
     data = await api("/api/state?day=" + today());
@@ -464,8 +497,8 @@ function renderHome() {
   $("home-month").textContent = now.toLocaleDateString(LOCALE, { weekday: "long", day: "numeric" }) + ` · settimana ${wk}`;
   $("home-title").textContent = data?.summary?.sheet || MONTHS[now.getMonth()];
 
-  const s0 = data?.summary;
-  if (!s0) { $("hero").innerHTML = `<p class="big-label">Caricamento…</p>`; return; }
+  if (!data?.summary) { $("hero").innerHTML = `<p class="big-label">Caricamento…</p>`; return; }
+  const s0 = withQueued(data.summary, queuedIn(data.summary.sheet));
   const s = { ...s0, ...adjusted(s0) };
   const left = s.budget - s.total;
   const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
@@ -479,7 +512,7 @@ function renderHome() {
       <p class="big-label">Hai speso questo mese${s.label}</p>
       <div class="big-num ${left < 0 ? "neg" : ""}">${eur(s.total)}</div>
       <div class="progress"><i class="${left < 0 ? "over" : ""}" style="width:${Math.min(100, (s.total / s.budget) * 100)}%"></i></div>
-      <div class="meta"><span class="${left < 0 ? "neg" : ""}">${left >= 0 ? `Ti restano ${eur(left)} di ${eur0(s.budget)}` : `Hai superato il budget di ${eur(-left)} (${eur0(s.budget)})`}</span><span>${daysLeft} giorni alla fine del mese</span></div>`
+      <div class="meta"><span class="${left < 0 ? "neg" : ""}">${left >= 0 ? `Ti restano ${eur(left)} di ${eurB(s.budget)}` : `Hai superato il budget di ${eur(-left)} (${eurB(s.budget)})`}</span><span>${daysLeft} giorni alla fine del mese</span></div>`
     : `
       <p class="big-label">Hai speso questo mese${s.label}</p>
       <div class="big-num">${eur(s.total)}</div>
@@ -498,27 +531,40 @@ function renderHome() {
     const li = e.target.closest("li[data-i]"); if (!li) return;
     const t = rows[+li.dataset.i];
     if (t.trip && !t.queued) return go("trips", { trip: t.trip });
-    openEdit(t, knownCats(), true, refresh);
+    openDetail(t, knownCats(), true, refresh);
   };
 }
 
 // avviso nella Home: categorie oltre l'80% del budget (o sforate). Affitto, abbonamenti e viaggi si pagano
 // in un colpo solo, quindi compaiono solo se sforano.
 const LUMPY = ["affitto", "abbonament", "viagg"];
+// Un avviso scorso a sinistra (o chiuso con × sul Mac) non torna più per quel mese, finché non peggiora
+// (da "usato l'80%" a "sforato" ricompare). Memorizzati nel telefono.
+const alertKey = (c) => `${data?.summary?.sheet || ""}|${lc(c.category)}|${c.total > c.budget ? "over" : "warn"}`;
+let alertList = [];
 function renderAlerts(categories) {
+  const off = new Set(store.get("alerts-off", []));
   const list = categories.filter((c) => c.budget > 0 && c.total / c.budget >= 0.8)
     .filter((c) => c.total > c.budget || !LUMPY.some((k) => c.category.toLowerCase().includes(k)))
+    .filter((c) => !off.has(alertKey(c)))
     .sort((a, b) => b.total / b.budget - a.total / a.budget).slice(0, 4);
+  alertList = list;
   $("home-alerts").hidden = !list.length;
-  $("home-alerts").innerHTML = list.map((c) => {
+  $("home-alerts").innerHTML = list.map((c, i) => {
     const over = c.total > c.budget;
-    return `<button type="button" class="alert-row ${over ? "over" : ""}" data-cat="${esc(c.category)}">
+    return `<li data-i="${i}"><div role="button" tabindex="0" class="alert-row ${over ? "over" : ""}" data-cat="${esc(c.category)}">
       <span class="emoji">${over ? "🔴" : "⚠️"}</span>
       <span><b>${esc(c.category)}</b><small>${over ? `sforato di ${eur(c.total - c.budget)}` : `usato il ${Math.round((c.total / c.budget) * 100)}% · restano ${eur(c.budget - c.total)}`}</small></span>
-      <i>›</i></button>`;
+      <button type="button" class="alert-x" data-dismiss="${i}" aria-label="Togli l'avviso">×</button><i>›</i></div></li>`;
   }).join("");
 }
+function dismissAlert(c) {
+  store.set("alerts-off", [...store.get("alerts-off", []), alertKey(c)].slice(-60));
+  renderAlerts(data?.summary ? withQueued(data.summary, queuedIn(data.summary.sheet)).categories : []);
+}
 $("home-alerts").addEventListener("click", (e) => {
+  const x = e.target.closest("[data-dismiss]");
+  if (x) return dismissAlert(alertList[+x.dataset.dismiss]);
   const b = e.target.closest("[data-cat]"); if (!b) return;
   go("history", { category: b.dataset.cat });
 });
@@ -540,7 +586,7 @@ async function deleteTx(t, trip, after) {
 }
 
 /** getItem(li) → { t, trip, after } se la riga si può eliminare, altrimenti null. */
-function enableSwipe(container, getItem, onDelete = (it) => deleteTx(it.t, it.trip, it.after)) {
+function enableSwipe(container, getItem, onDelete = (it) => deleteTx(it.t, it.trip, it.after), opts = {}) {
   let li = null, start = null, dx = 0, horizontal = null;
   const closeAll = (except) => container.querySelectorAll("li.swiped").forEach((x) => {
     if (x !== except) { x.classList.remove("swiped"); x.style.transform = ""; }
@@ -569,7 +615,13 @@ function enableSwipe(container, getItem, onDelete = (it) => deleteTx(it.t, it.tr
   container.addEventListener("touchend", () => {
     if (!li) return;
     li.style.transition = "";
-    if (horizontal) {
+    if (horizontal && opts.instant && dx < -SWIPE / 2) {  // scorri e basta: la riga esce a sinistra e si toglie
+      const row = li, it = getItem(row);
+      row.dataset.swipedAt = Date.now();
+      row.style.transform = "translateX(-110%)";
+      row.style.opacity = "0";
+      setTimeout(() => it && onDelete(it), 200);
+    } else if (horizontal) {
       const open = dx < -SWIPE / 2;
       li.style.removeProperty("--pull");
       li.classList.toggle("swiped", open);
@@ -596,7 +648,7 @@ function catRow(c) {
   const over = c.budget > 0 && c.total > c.budget;
   const leftTxt = c.budget > 0 ? (over ? `sforato di ${eur(c.total - c.budget)}` : `restano ${eur(c.budget - c.total)}`) : "nessun budget";
   return `<li data-cat="${esc(c.category)}"><span class="emoji">${emoji(c.category)}</span>
-    <div><div class="line"><span>${esc(c.category)}</span><span>${eur(c.total)}${c.budget ? " / " + eur0(c.budget) : ""}</span></div>
+    <div><div class="line"><span>${esc(c.category)}</span><span>${eur(c.total)}${c.budget ? " / " + eurB(c.budget) : ""}</span></div>
     <div class="bar"><i class="${over ? "over" : !c.budget ? "none" : ""}" style="width:${pct}%"></i></div>
     <div class="left ${over ? "neg" : ""}">${leftTxt}</div></div></li>`;
 }
@@ -645,9 +697,31 @@ async function openAdd(opts = {}) {
 /** Pillole "Spesa normale / ✈ viaggio": i viaggi più recenti per primi. */
 function renderWhere() {
   const names = tripsCache.map((t) => t.name).slice(0, 6);
-  $("where").hidden = sheet.mode === "edit" || !names.length;
+  $("where").hidden = sheet.mode === "edit";
   $("where-pills").innerHTML = `<button type="button" data-where="">📅 Spesa del mese</button>` +
-    names.map((n) => `<button type="button" data-where="${esc(n)}">✈️ ${esc(n)}</button>`).join("");
+    names.map((n) => `<button type="button" data-where="${esc(n)}">✈️ ${esc(n)}</button>`).join("") +
+    `<button type="button" class="add-month" data-new-trip>✈️ Nuovo viaggio…</button>`;
+}
+
+/** Dalla schermata ＋: crea un viaggio al volo e ci mette la spesa. */
+async function newTripFromSheet() {
+  const dlg = $("ntdlg");
+  $("nt-name").value = "";
+  dlg.returnValue = "";
+  dlg.showModal();
+  $("nt-name").focus();
+  await new Promise((r) => (dlg.onclose = r));
+  const name = $("nt-name").value.trim();
+  if (dlg.returnValue !== "ok" || !name) return;
+  try {
+    const r = await api("/api/trips", { method: "POST", body: { name, copy_from: null } });
+    const made = r?.name || name;
+    await loadTripsCache();
+    if (!tripsCache.some((t) => t.name === made)) tripsCache.unshift({ name: made, categories: [] });
+    renderWhere();
+    setWhere(made);
+    toast(`✓ Viaggio ${made} creato`);
+  } catch (err) { toast(failMsg(err)); }
 }
 
 function setWhere(trip) {
@@ -666,6 +740,7 @@ function setWhere(trip) {
 }
 
 $("where-pills").addEventListener("click", (e) => {
+  if (e.target.closest("[data-new-trip]")) return newTripFromSheet();
   const b = e.target.closest("button[data-where]"); if (!b) return;
   setWhere(b.dataset.where || null);
   if (!sheet.trip && $("desc").value.trim()) fetchSuggest($("desc").value.trim(), false);
@@ -691,6 +766,59 @@ function openEdit(t, cats, editable, onDone, trip = null) {
   renderCats();
   showSheet();
 }
+
+// ---------- scheda della spesa: tocco su una spesa → descrizione, importo, note; Modifica a sinistra, Elimina a destra ----------
+let txCtx = null;
+function openDetail(t, cats, editable, onDone, trip = null) {
+  if (t.orig) t = { ...t.orig, queued: true, trip: trip ? undefined : t.orig.trip };  // rata di una spesa in coda: apro la spesa intera
+  txCtx = { t, cats, editable, onDone, trip, skipSave: false };
+  $("tx-emoji").textContent = emoji(t.category);
+  $("tx-desc").textContent = t.description;
+  $("tx-amount").textContent = eur(t.amount);
+  const where = trip || t.trip;
+  $("tx-meta").textContent = [t.category || "—", fmtDay(t.date), where ? "✈️ " + where : "", t.queued ? "in attesa del Mac" : ""].filter(Boolean).join(" · ");
+  $("tx-note").value = t.note || "";
+  $("txdlg").showModal();
+  $("tx-note").blur();  // niente tastiera finché non tocchi le note
+}
+async function saveNote(c) {
+  const note = $("tx-note").value.trim() || null;
+  const t = c.t;
+  if ((t.note || null) === note) return;
+  if (t.queued) setQueue(queue().map((e) => (e.id === t.id ? { ...e, note } : e)));
+  else {
+    if (!t.category) return toast("Scegli prima la categoria con Modifica");
+    const expect = { description: t.description, amount: t.amount };
+    const base = { date: t.date, description: t.description, amount: t.amount, category: t.category, note };
+    try {
+      if (c.trip) await api("/api/trips/edit", { method: "POST", body: { ...base, trip: c.trip, row: t.row, expect } });
+      else await api("/api/expenses/edit", { method: "POST", body: { ...base, sheet: t.sheet, row: t.row, date: null, expect } });
+    } catch (err) { return toast(failMsg(err)); }
+  }
+  t.note = note;
+  toast(note ? "✓ Note salvate" : "Note tolte");
+  c.onDone?.();
+}
+$("txdlg").addEventListener("close", () => { const c = txCtx; txCtx = null; if (c && !c.skipSave) saveNote(c); });
+$("tx-close").addEventListener("click", () => $("txdlg").close());
+$("txdlg").addEventListener("click", (e) => {  // tocco fuori dalla scheda = chiudi
+  if (e.target !== $("txdlg")) return;
+  const r = $("txdlg").getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) $("txdlg").close();
+});
+$("tx-edit").addEventListener("click", () => {
+  const c = txCtx; if (!c) return;
+  c.skipSave = true;
+  const note = $("tx-note").value.trim() || null;  // le note appena scritte passano nella modifica
+  $("txdlg").close();
+  openEdit({ ...c.t, note }, c.cats, c.editable, c.onDone, c.trip);
+});
+$("tx-delete").addEventListener("click", () => {
+  const c = txCtx; if (!c) return;
+  c.skipSave = true;
+  $("txdlg").close();
+  deleteTx(c.t, c.trip, c.onDone);
+});
 
 let scrollBefore = 0;
 function showSheet() {
@@ -928,7 +1056,7 @@ function localSuggest(text, known) {
   for (const [cat, words] of Object.entries(pack.keywords)) {
     for (const w of words) {
       const ww = w.toLowerCase().trim();
-      if (padded.includes(` ${ww} `) || (ww.length > 4 && key.includes(ww))) add(cat, ww.length > 3 ? 0.75 : 0.6);
+      if (padded.includes(` ${ww} `) || (ww.length > 4 && key.includes(ww))) add(cat, (ww.length > 3 ? 0.75 : 0.6) + Math.min(ww.length, 30) / 1000);  // a parità vince la parola più lunga
     }
   }
   const lc = (x) => x.toLowerCase();
@@ -1038,6 +1166,7 @@ async function flushQueue() {
     toast(`${sent} ${sent === 1 ? "spesa inviata" : "spese inviate"} online`);
     refresh();
     if (view === "history") loadHistory();  // quello che si vede era la copia di prima
+    if (view === "trips" && currentTrip) showTrip(currentTrip);
   }
 }
 
@@ -1173,10 +1302,33 @@ async function showMonth(sheetName, keepFilter) {
   if (!keepFilter) catFilter = null;
   const ordered = [...monthsInfo.months.filter((m) => !m.future).reverse(), ...monthsInfo.months.filter((m) => m.future)];
   $("month-pills").innerHTML = ordered.map((m) =>
-    `<button data-sheet="${esc(m.sheet)}" class="${m.sheet === sheetName ? "on" : ""} ${m.future ? "future" : ""}">${esc(m.sheet)}</button>`).join("");
+    `<button data-sheet="${esc(m.sheet)}" class="${m.sheet === sheetName ? "on" : ""} ${m.future ? "future" : ""}">${esc(m.sheet)}</button>`).join("")
+    + ADD_MONTH_PILL;
   monthData = await api("/api/month?sheet=" + encodeURIComponent(sheetName));
   renderMonth();
 }
+
+// "＋ Mese" in fondo alle pillole (Storico e Piano): crea il mese dopo l'ultimo, con entrate e budget dell'ultimo
+const ADD_MONTH_PILL = `<button type="button" class="add-month" data-add-month>＋ Mese</button>`;
+async function addMonth() {
+  try {
+    const r = await api("/api/months/add", { method: "POST", body: {} });
+    toast(`✓ Aggiunto ${r.sheet}: entrate e budget copiati dall'ultimo mese`);
+    return r.sheet;
+  } catch (err) {
+    toast(err.network ? "Per aggiungere un mese serve il Mac acceso" : failMsg(err));
+    return null;
+  }
+}
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-add-month]"); if (!b || b.disabled) return;
+  b.disabled = true;
+  const sheetName = await addMonth();
+  b.disabled = false;
+  if (!sheetName) return;
+  if (view === "history") { store.set("month", sheetName); loadHistory(); }
+  if (view === "budget") { budgetTarget = { label: sheetName, sheet: sheetName }; await loadBudget(); }
+});
 
 $("month-pills").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-sheet]"); if (!b) return;
@@ -1194,12 +1346,14 @@ function weekRange(w, sheetName) {
 }
 
 function renderMonth() {
-  const { summary: s0, transactions: txs } = monthData;
+  const q = queuedIn(monthData.summary.sheet);
+  const s0 = withQueued(monthData.summary, q);
+  const txs = [...q, ...monthData.transactions];
   const s = { ...s0, ...adjusted(s0) };
   const left = s.budget - s.total;
   $("month-excl").innerHTML = exclHtml();
   $("month-summary").innerHTML = `<div><span>Speso${s.label ? " *" : ""}</span><b>${eur(s.total)}</b></div>
-    <div><span>Budget</span><b>${s.budget ? eur0(s.budget) : "—"}</b></div>
+    <div><span>Budget</span><b>${s.budget ? eurB(s.budget) : "—"}</b></div>
     <div><span>${!s.budget ? "Rimasto" : left >= 0 ? "Avanzo" : "Sforato"}</span><b class="${s.budget ? sign(left) : ""}">${s.budget ? eur(Math.abs(left)) : "—"}</b></div>`;
 
   const withBudget = s.categories.filter((c) => c.total > 0 || c.budget > 0).sort((a, b) => b.total - a.total);
@@ -1229,7 +1383,7 @@ function renderMonth() {
     const li = e.target.closest("li[data-i]"); if (!li) return;
     const t = flat[+li.dataset.i];
     if (t.trip) return go("trips", { trip: t.trip });
-    openEdit(t, monthData.categories, s.editable, () => showMonth(s.sheet, true));
+    openDetail(t, monthData.categories, s.editable, () => showMonth(s.sheet, true));
   };
 }
 
@@ -1258,13 +1412,18 @@ async function loadYear() {
 // Mesi nascosti con l'occhio (profile.hidden_months, uguali su tutti i dispositivi): restano in elenco
 // più chiari ma non entrano in Budget/Speso/Surplus in alto. Contano solo i mesi già iniziati, come prima.
 function renderYear() {
-  const y = loadYear.data; if (!y) return;
+  if (!loadYear.data) return;
+  // spese ancora sul telefono: contano già nello speso del loro mese
+  const y = { ...loadYear.data, months: loadYear.data.months.map((m) => {
+    const add = r2(queuedIn(m.sheet || m.month).reduce((a, t) => a + t.amount, 0));
+    return add ? { ...m, spent: r2(m.spent + add), surplus: r2(m.surplus - add), saved: r2(m.saved - add) } : m;
+  }) };
   const hidden = new Set(profile.hidden_months || []);
   const key = (m) => m.sheet || m.month;
   const counted = y.months.filter((m) => !m.future && !hidden.has(key(m)));
   const t = Object.fromEntries(["budget", "spent", "surplus"].map((k) => [k, r2(counted.reduce((a, m) => a + (m[k] || 0), 0))]));
   const off = y.months.filter((m) => !m.future && hidden.has(key(m))).map((m) => m.month);
-  $("year-stats").innerHTML = `<div><span>Budget</span><b>${eur0(t.budget)}</b></div>
+  $("year-stats").innerHTML = `<div><span>Budget</span><b>${eurB(t.budget)}</b></div>
     <div><span>Speso</span><b>${eur0(t.spent)}</b></div>
     <div><span>${t.surplus >= 0 ? "Surplus" : "Deficit"}</span><b class="${sign(t.surplus)}">${eur(t.surplus)}</b></div>`;
   $("year-off").hidden = !off.length;
@@ -1278,7 +1437,7 @@ function renderYear() {
     if (m.future) {
       return `<div class="month-card future" data-sheet="${esc(m.sheet || "")}">
         <div class="top"><b>${esc(m.month)}</b><span class="badge none">da iniziare</span></div>
-        <div class="meta">Budget ${m.budget ? eur0(m.budget) : "non ancora impostato"}</div></div>`;
+        <div class="meta">Budget ${m.budget ? eurB(m.budget) : "non ancora impostato"}</div></div>`;
     }
     const isOff = hidden.has(key(m));
     const pct = m.budget > 0 ? Math.min(100, (m.spent / m.budget) * 100) : 100;
@@ -1291,7 +1450,7 @@ function renderYear() {
     return `<div class="month-card${isOff ? " is-off" : ""}" data-sheet="${esc(m.sheet || "")}">
       <div class="top"><b>${esc(m.month)}${now ? " <span class='hint'>· in corso</span>" : ""}</b><span class="top-right">${badge}${eye}</span></div>
       <div class="progress"><i class="${!m.budget ? "none" : m.spent > m.budget ? "over" : ""}" style="width:${pct}%"></i></div>
-      <div class="meta">Speso ${eur(m.spent)} su budget ${m.budget ? eur0(m.budget) : "non impostato"}</div>
+      <div class="meta">Speso ${eur(m.spent)} su budget ${m.budget ? eurB(m.budget) : "non impostato"}</div>
       <div class="meta">Entrate ${eur0(m.income)} · ${saved}${isOff ? " · <b>non contato nei totali</b>" : ""}</div>
     </div>`;
   }).join("");
@@ -1428,7 +1587,8 @@ async function loadBudget() {
     loadBudget.months = m.months;
     if (!budgetTarget || !opts.some((o) => o.label === budgetTarget.label)) budgetTarget = opts[0];
     $("budget-pills").innerHTML = opts.map((o, i) =>
-      `<button data-i="${i}" class="${o.label === budgetTarget.label ? "on" : ""}">${esc(o.label)}</button>`).join("");
+      `<button data-i="${i}" class="${o.label === budgetTarget.label ? "on" : ""}">${esc(o.label)}</button>`).join("")
+      + (opts.at(-1)?.sheet ? ADD_MONTH_PILL : "");
     if (budgetMode === "cats") return loadCatManage();
     try { profile = await api("/api/profile"); } catch { profile = {}; }
     if (profile.quiz?.obiettivo != null && saveFixed == null && !loadBudget.saveSet) setSave(QUIZ[4].opts[profile.quiz.obiettivo][2], null);
@@ -1452,7 +1612,7 @@ function renderBalance(month, budget) {
   if (!balanceData) { el.hidden = true; return; }
   el.hidden = false;
   const b = balanceData;
-  const bud = `<div><small>Budget di ${esc(month || "questo mese")}</small><b>${eur0(budget || 0)}</b></div>`;
+  const bud = `<div><small>Budget di ${esc(month || "questo mese")}</small><b>${eurB(budget || 0)}</b></div>`;
   if (b.amount == null) {
     el.className = "card bal-card";
     el.innerHTML = `<div><small>🏦 Soldi sul conto</small><b class="hint">＋ Aggiungi</b></div>${bud}
@@ -1694,15 +1854,15 @@ function updatePropTotal() {
   const proposed = vals.reduce((a, b) => a + b, 0);
   // colonna "Proposto": evidenzio quando il tuo budget è diverso
   vals.forEach((v, i) => document.querySelector(`[data-prop="${i}"]`)?.classList.toggle("diff", Math.abs(v - (typed[i] || 0)) >= 0.5));
-  $("prop-total").innerHTML = `<div><span>Puoi spendere</span><b>${eur0(spendable)}</b></div>
+  $("prop-total").innerHTML = `<div><span>Puoi spendere</span><b>${eurB(spendable)}</b></div>
     <div><span>Proposto (somma)</span><b>${eur0(proposed)}</b></div>
-    <div><span>Il tuo budget (somma)</span><b class="${-left > 0.5 ? "neg" : ""}">${eur0(assigned)}</b></div>
-    <div class="state ${left < -0.5 ? "neg" : ""}">${Math.abs(left) < 0.5 ? "✓ Tutto diviso" : left > 0 ? `Da dividere ${eur0(left)}` : `Sfori di ${eur0(-left)}`}</div>`;
+    <div><span>Il tuo budget (somma)</span><b class="${-left > 0.5 ? "neg" : ""}">${eurB(assigned)}</b></div>
+    <div class="state ${left < -0.5 ? "neg" : ""}">${Math.abs(left) < 0.5 ? "✓ Tutto diviso" : left > 0 ? `Da dividere ${eurB(left)}` : `Sfori di ${eurB(-left)}`}</div>`;
   // barra fissa in basso: mentre scrivi vedi subito quanto hai a disposizione e se sfori (e di quanto)
   $("plan-bar").className = "plan-bar" + (left < -0.5 ? " neg" : Math.abs(left) < 0.5 ? " ok" : "");
-  $("plan-bar").innerHTML = `<div><small>Disponibile</small><b>${eur0(spendable)}</b></div>
-    <div><small>Nelle categorie</small><b>${eur0(assigned)}</b></div>
-    <div class="pb-state"><b>${left < -0.5 ? `⚠️ Sfori di ${eur0(-left)}` : Math.abs(left) < 0.5 ? "✓ Tutto diviso" : `Restano ${eur0(left)}`}</b>
+  $("plan-bar").innerHTML = `<div><small>Disponibile</small><b>${eurB(spendable)}</b></div>
+    <div><small>Nelle categorie</small><b>${eurB(assigned)}</b></div>
+    <div class="pb-state"><b>${left < -0.5 ? `⚠️ Sfori di ${eurB(-left)}` : Math.abs(left) < 0.5 ? "✓ Tutto diviso" : `Restano ${eurB(left)}`}</b>
       <small>${{ saving: "Salvo…", saved: "✓ Salvato", offline: "✓ Salvato sul telefono", error: "Non salvato" }[planSaved] || ""}</small></div>`;
 
   const month = budgetTarget?.label || "";
@@ -1713,16 +1873,16 @@ function updatePropTotal() {
   const finalSave = save + (left > 0 ? left : 0);
   $("plan-ladder").innerHTML = `<p class="big-label">Piano di ${esc(month)}</p>
     <ul class="ladder-rows">
-      <li><span>Entrate</span><b>${eur0(base)}</b></li>
+      <li><span>Entrate</span><b>${eurB(base)}</b></li>
       <li><span>Da mettere da parte</span><b>−${eur0(save)}</b></li>
       ${carryRow}
-      <li class="total"><span>Puoi spendere</span><b class="${spendable < 0 ? "neg" : ""}">${eur0(spendable)}</b></li>
+      <li class="total"><span>Puoi spendere</span><b class="${spendable < 0 ? "neg" : ""}">${eurB(spendable)}</b></li>
     </ul>
     <div class="ladder-foot ${left < -0.5 ? "neg" : ""}">${base <= 0 ? "Inizia scrivendo le entrate al passo 1."
       : Math.abs(left) < 0.5 ? `✓ Hai diviso tutto tra le categorie. Risparmi ${eur0(save)}.`
-      : left > 0 ? `Ti restano ${eur0(left)} da dividere tra le categorie. Se li lasci così, risparmi ${eur0(finalSave)}.`
-      : planOverIgnored ? `Le categorie superano di ${eur0(-left)} quello che puoi spendere (hai scelto di ignorarlo).`
-      : `⚠️ Le categorie superano di ${eur0(-left)} quello che puoi spendere.
+      : left > 0 ? `Ti restano ${eurB(left)} da dividere tra le categorie. Se li lasci così, risparmi ${eurB(finalSave)}.`
+      : planOverIgnored ? `Le categorie superano di ${eurB(-left)} quello che puoi spendere (hai scelto di ignorarlo).`
+      : `⚠️ Le categorie superano di ${eurB(-left)} quello che puoi spendere.
         <div class="over-actions"><button type="button" class="primary" id="over-fix">Aggiusta</button>
         <button type="button" class="secondary" id="over-ignore">Ignora</button></div>`}</div>`;
 }
@@ -1905,7 +2065,7 @@ function renderPace(p) {
       : `<span class="warn">usato il ${Math.round(c.used * 100)}%</span>`;
     const body = `<ul class="f-items">
       <li><span>Speso finora</span><b>${eur(c.total)}</b></li>
-      <li><span>Budget</span><b>${eur0(c.budget)}</b></li>
+      <li><span>Budget</span><b>${eurB(c.budget)}</b></li>
       ${!c.lumpy && p.reliable ? `<li><span>A fine mese, a questo ritmo</span><b class="${c.projected > c.budget ? "neg" : ""}">${eur0(c.projected)}</b></li>` : ""}
       <li><span>Puoi ancora spendere</span><b>${c.per_day > 0 ? `${eur(c.per_day)} al giorno` : "niente"}</b></li></ul>
       <p class="hint">${c.over ? "Per recuperare, togli la stessa cifra da un'altra categoria nel Piano." : "Rallenta un po' per restare nel budget."}</p>`;
@@ -1929,12 +2089,12 @@ function renderBudgetTips(list, pace) {
     const max = Math.max(1, ...b.months.map((m) => Math.max(m.total, m.budget)));
     const bars = `<ul class="mini-bars">${b.months.map((m) => `<li><span>${esc(m.sheet)}</span>
       <div class="bar"><i class="${m.total > m.budget ? "over" : ""}" style="width:${(m.total / max) * 100}%"></i><em style="left:${(m.budget / max) * 100}%"></em></div>
-      <b>${eur0(m.total)} <small>/ ${eur0(m.budget)}</small></b></li>`).join("")}</ul><p class="hint">La tacca è il budget, la barra quanto hai speso.</p>`;
+      <b>${eurB(m.total)} <small>/ ${eurB(m.budget)}</small></b></li>`).join("")}</ul><p class="hint">La tacca è il budget, la barra quanto hai speso.</p>`;
     const now = pace?.categories.find((c) => c.category.toLowerCase() === b.category.toLowerCase());
     const done = now && (b.kind === "alza" ? now.budget >= b.suggest - 0.5 : now.budget <= b.suggest + 0.5);
     const btn = !pace ? "" : done
-      ? `<p class="ok-line">✓ A ${esc(pace.sheet)} hai già messo ${eur0(now.budget)}</p>`
-      : `<button type="button" class="secondary" data-btip="${idx}">Usa ${eur0(b.suggest)} a ${esc(pace.sheet)}${now ? ` (ora ${eur0(now.budget)})` : ""}</button>`;
+      ? `<p class="ok-line">✓ A ${esc(pace.sheet)} hai già messo ${eurB(now.budget)}</p>`
+      : `<button type="button" class="secondary" data-btip="${idx}">Usa ${eurB(b.suggest)} a ${esc(pace.sheet)}${now ? ` (ora ${eurB(now.budget)})` : ""}</button>`;
     return fold(emoji(b.category), esc(b.category), sub, `<p>${esc(text)}</p>${bars}${btn}`);
   }).join("");
 }
@@ -1960,7 +2120,7 @@ $("sav-months").addEventListener("toggle", async (e) => {
     const cats = m.summary.categories.filter((c) => c.budget > 0 || c.total > 0)
       .map((c) => ({ ...c, diff: c.budget - c.total })).sort((a, b) => a.diff - b.diff);
     d.querySelector(".f-body").innerHTML = cats.length ? `<ul class="f-items">${cats.map((c) => `<li><span>${emoji(c.category)} ${esc(c.category)}</span>
-      <small>${eur0(c.total)} / ${c.budget ? eur0(c.budget) : "—"}</small>
+      <small>${eurB(c.total)} / ${c.budget ? eurB(c.budget) : "—"}</small>
       <b class="${c.budget ? sign(c.diff) : ""}">${c.budget ? (c.diff >= 0 ? "+" : "−") + eur0(Math.abs(c.diff)) : ""}</b></li>`).join("")}</ul>
       <button type="button" class="text-btn" data-open="${esc(d.dataset.sheet)}">Vedi le spese →</button>` : `<p class="hint">Nessuna spesa.</p>`;
   } catch (err) { d.querySelector(".f-body").innerHTML = `<p class="hint">${esc(failMsg(err))}</p>`; delete d.dataset.loaded; }
@@ -2301,15 +2461,15 @@ async function loadCatManage() {
     if (!profile.plan && !profile.quiz) { try { profile = await api("/api/profile"); } catch {} }
     $("cat-manage").innerHTML = catManage.map((c, i) => `<li><button type="button" class="pick" data-i="${i}">
       <span class="emoji">${emoji(c.category)}</span><span class="name">${esc(c.category)}</span>
-      <span class="budget">${c.budget ? eur0(c.budget) : "—"}</span></button></li>`).join("");
+      <span class="budget">${c.budget ? eurB(c.budget) : "—"}</span></button></li>`).join("");
     $("cat-add").hidden = r.free_slots <= 0;
     const avail = spendableFor(budgetTarget?.sheet || budgetTarget?.label, r.income);
     const sum = catManage.reduce((a, c) => a + (c.budget || 0), 0);
     $("cat-avail").hidden = avail == null;
     if (avail != null) {
       $("cat-avail").className = "cat-avail" + (sum - avail > 0.5 ? " neg" : "");
-      $("cat-avail").textContent = sum - avail > 0.5 ? `⚠️ Puoi spendere ${eur0(avail)}, nelle categorie ci sono ${eur0(sum)}: sfori di ${eur0(sum - avail)}.`
-        : `Puoi spendere ${eur0(avail)} · nelle categorie ${eur0(sum)} · restano ${eur0(avail - sum)}.`;
+      $("cat-avail").textContent = sum - avail > 0.5 ? `⚠️ Puoi spendere ${eurB(avail)}, nelle categorie ci sono ${eurB(sum)}: sfori di ${eurB(sum - avail)}.`
+        : `Puoi spendere ${eurB(avail)} · nelle categorie ${eurB(sum)} · restano ${eurB(avail - sum)}.`;
     }
   } catch (err) { $("cat-manage").innerHTML = `<li class="empty">${esc(failMsg(err))}</li>`; }
 }
@@ -2364,8 +2524,8 @@ function editCategory(c, month, others) {
       const over = rest + v - avail;
       $("cd-avail").classList.toggle("neg", over > 0.5);
       $("cd-avail").textContent = over > 0.5
-        ? `⚠️ Con ${eur0(v)} sfori di ${eur0(over)}: puoi spendere ${eur0(avail)} e le altre categorie hanno già ${eur0(rest)}.`
-        : `Puoi spendere ${eur0(avail)} · le altre categorie hanno ${eur0(rest)} · per questa restano ${eur0(Math.max(0, avail - rest))}.`;
+        ? `⚠️ Con ${eurB(v)} sfori di ${eurB(over)}: puoi spendere ${eurB(avail)} e le altre categorie hanno già ${eurB(rest)}.`
+        : `Puoi spendere ${eurB(avail)} · le altre categorie hanno ${eurB(rest)} · per questa restano ${eurB(Math.max(0, avail - rest))}.`;
     };
     $("cd-budget").oninput = showAvail;
     showAvail();
@@ -2407,7 +2567,7 @@ async function copyBudgetToMonths(cat = null) {
   const later = months.slice(i + 1).filter((m) => m.editable);
   if (!later.length) return toast(`Non ci sono mesi dopo ${from}`);
   $("cm-title").textContent = cat ? `Copia ${cat.category}` : `Copia il budget di ${from}`;
-  $("cm-text").textContent = cat ? `Il budget di ${cat.category} a ${from} (${eur0(cat.budget || 0)}) va nei mesi che scegli.`
+  $("cm-text").textContent = cat ? `Il budget di ${cat.category} a ${from} (${eurB(cat.budget || 0)}) va nei mesi che scegli.`
     : `Il budget di tutte le categorie di ${from} va nei mesi che scegli. Entrate e surplus/deficit restano come sono.`;
   $("cm-list").innerHTML = later.map((m, k) => `<li><label class="check"><input type="checkbox" value="${esc(m.sheet)}" ${k === 0 ? "checked" : ""}> ${esc(m.sheet)}</label></li>`).join("");
   const boxes = () => [...$("cm-list").querySelectorAll("input")];
@@ -2492,7 +2652,7 @@ async function loadTrips(opts = {}) {
     const pct = t.budget > 0 ? Math.min(100, (t.total / t.budget) * 100) : 0;
     return `<div class="trip-card" data-i="${i}"><span class="emoji">✈️</span>
       <div><b>${esc(t.name)}</b><span class="meta">${fmtRange(t.from, t.to)} · ${t.count} ${t.count === 1 ? "spesa" : "spese"}</span></div>
-      <span class="amt">${eur(t.total)}${t.budget ? `<br><span class="meta">di ${eur0(t.budget)}</span>` : ""}</span>
+      <span class="amt">${eur(t.total)}${t.budget ? `<br><span class="meta">di ${eurB(t.budget)}</span>` : ""}</span>
       ${t.budget ? `<div class="progress"><i class="${t.total > t.budget ? "over" : ""}" style="width:${pct}%"></i></div>` : ""}</div>`;
   }).join("") : `<p class="empty">Nessun viaggio. Premi "＋ Nuovo" per crearne uno.</p>`;
 }
@@ -2507,7 +2667,7 @@ $("trip-new-btn").addEventListener("click", () => {
   const withBudget = tripsCache.filter((t) => t.budget > 0 || t.categories?.some((c) => !c.virtual));
   $("trip-copy-row").hidden = !withBudget.length;
   $("trip-copy-from").innerHTML = `<option value="">Nessuno</option>` +
-    withBudget.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}${t.budget ? ` · ${eur0(t.budget)}` : ""}</option>`).join("");
+    withBudget.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}${t.budget ? ` · ${eurB(t.budget)}` : ""}</option>`).join("");
   if (!$("trip-new").hidden) $("trip-name").focus();
 });
 $("trip-create").addEventListener("click", async () => {
@@ -2529,6 +2689,22 @@ async function showTrip(name) {
   $("trip-detail").hidden = false;
   try { tripData = await api("/api/trip?name=" + encodeURIComponent(name)); }
   catch (err) { toast(failMsg(err)); return loadTrips(); }
+  // spese del viaggio ancora sul telefono (Mac spento): contano già nei totali
+  const tq = queue().filter((e) => e.trip === name).map((e) => ({ ...e, queued: true, trip: undefined }));
+  if (tq.length) {
+    tripData = JSON.parse(JSON.stringify(tripData));
+    tripData.transactions = [...tq, ...tripData.transactions];
+    const ts = tripData.summary;
+    for (const t of tq) {
+      let c = ts.categories.find((x) => !x.virtual && lc(x.category) === lc(t.category))
+        || ts.categories.find((x) => x.virtual);
+      if (!c) { c = { category: "Senza categoria", budget: 0, total: 0, left: 0, virtual: true }; ts.categories.push(c); }
+      c.total = r2(c.total + t.amount); c.left = r2((c.budget || 0) - c.total);
+      ts.total = r2(ts.total + t.amount); ts.count = (ts.count || 0) + 1;
+      if (!ts.from || t.date < ts.from) ts.from = t.date;
+      if (!ts.to || t.date > ts.to) ts.to = t.date;
+    }
+  }
   const s = tripData.summary;
   $("trip-title").textContent = "✈️ " + s.name;
   $("trip-cat-add").hidden = tripData.free_slots <= 0;
@@ -2538,7 +2714,7 @@ async function showTrip(name) {
       <p class="big-label">${left >= 0 ? "Ti restano per il viaggio" : "Hai superato il budget del viaggio di"}</p>
       <div class="big-num ${left < 0 ? "neg" : ""}">${eur(Math.abs(left))}</div>
       <div class="progress"><i class="${left < 0 ? "over" : ""}" style="width:${Math.min(100, (s.total / s.budget) * 100)}%"></i></div>
-      <div class="meta"><span>Speso ${eur(s.total)} di ${eur0(s.budget)}</span></div>`
+      <div class="meta"><span>Speso ${eur(s.total)} di ${eurB(s.budget)}</span></div>`
     : `<p class="big-label">Speso nel viaggio</p><div class="big-num">${eur(s.total)}</div>
       <div class="meta"><span>Imposta un budget toccando le categorie qui sotto.</span></div>`;
   $("trip-cats").innerHTML = s.categories.map(catRow).join("");
@@ -2550,7 +2726,7 @@ async function showTrip(name) {
 $("trip-list").addEventListener("click", (e) => {
   const li = e.target.closest("li[data-i]"); if (!li) return;
   const t = tripData.transactions[+li.dataset.i];
-  openEdit({ ...t, trip: undefined }, tripData.categories, true, () => showTrip(currentTrip), currentTrip);
+  openDetail({ ...t, trip: undefined }, tripData.categories, true, () => { showTrip(currentTrip); loadTripsCache(); }, currentTrip);
 });
 $("trip-cats").addEventListener("click", async (e) => {
   const li = e.target.closest("li[data-cat]"); if (!li) return;
@@ -2619,7 +2795,7 @@ $("trip-cat-add").addEventListener("click", async () => {
 $("trip-copy-btn").addEventListener("click", async () => {
   const others = tripsCache.filter((t) => t.name !== currentTrip);
   if (!others.length) return toast("Non ci sono altri viaggi da cui copiare");
-  $("copy-src").innerHTML = others.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}${t.budget ? ` · ${eur0(t.budget)}` : ""}</option>`).join("");
+  $("copy-src").innerHTML = others.map((t) => `<option value="${esc(t.name)}">${esc(t.name)}${t.budget ? ` · ${eurB(t.budget)}` : ""}</option>`).join("");
   const dlg = $("copydlg");
   dlg.returnValue = "";
   dlg.showModal();
@@ -2666,6 +2842,7 @@ enableSwipe($("home-recent"), (li) => {
   const t = homeRows[+li.dataset.i];
   return t && !(t.trip && t.sheet && !t.queued) ? { t, after: refresh } : null;
 });
+enableSwipe($("home-alerts"), (li) => alertList[+li.dataset.i] || null, (c) => dismissAlert(c), { instant: true });
 enableSwipe($("month-list"), (li) => {
   const t = monthFlat[+li.dataset.i];
   return t && !t.trip ? { t, after: () => showMonth(monthData.summary.sheet, true) } : null;

@@ -185,7 +185,7 @@ function fromKeywords(key) {
   for (const [cat, words] of Object.entries(KEYWORDS)) {
     for (const raw of words) {
       const w = raw.toLowerCase();
-      if (padded.includes(` ${w.trim()} `) || (w.length > 4 && key.includes(w.trim()))) scores[cat] = Math.max(scores[cat] || 0, w.length > 3 ? 0.75 : 0.6);
+      if (padded.includes(` ${w.trim()} `) || (w.length > 4 && key.includes(w.trim()))) scores[cat] = Math.max(scores[cat] || 0, (w.length > 3 ? 0.75 : 0.6) + Math.min(w.trim().length, 30) / 1000);  // a parità vince la parola più lunga
     }
   }
   return scores;
@@ -344,8 +344,14 @@ const subsSorted = () => [...db().subscriptions].sort((a, b) => a.position - b.p
 function subDone(s, key) {
   return db().expenses.some((e) => !e.trip && keyOf(e.date) === key && cf(e.description).includes(cf(s.name)) && Math.abs(e.amount - s.amount) < 0.01);
 }
+/** La categoria Viaggi c'è sempre: i viaggi finiscono lì nei totali del mese. */
+function ensureViaggi() {
+  if (!db().categories.length || canonical("Viaggi", catNames())) return false;
+  try { addCategory("Viaggi", 0); return true; } catch { return false; }   // 15 categorie già usate: niente
+}
 function applySubscriptions() {
   const today = isoToday(), key = keyOf(today), added = [];
+  if (ensureViaggi()) Store.commit();
   for (const s of subsSorted()) {
     if (!s.auto || Math.min(s.day, daysIn(key)) > +today.slice(8) || subDone(s, key)) continue;
     const cat = ensureCategory("Abbonamenti");
@@ -526,6 +532,12 @@ const routes = {
       current: labelOf(cur, keys), this: { label: MONTHS[+cur.slice(5) - 1], date: today },
       next: { sheet: keys.includes(nxt) ? labelOf(nxt, keys) : null, label: MONTHS[+nxt.slice(5) - 1], date: `${nxt}-01` } };
   },
+  // "＋ Mese": il mese dopo l'ultimo, con entrate e budget dell'ultimo mese (come ensureMonth)
+  "POST /api/months/add": () => {
+    const next = addMonthsKey(monthKeys().at(-1), 1);
+    ensureMonth(next);
+    return { status: "ok", sheet: labelOf(next), created: true, date: `${next}-01` };
+  },
   "GET /api/month": (q) => {
     const key = sheetKey(q.sheet), keys = monthKeys();
     return { summary: summary(key, keys), transactions: transactions(key, keys).sort(byDateDesc), categories: catNames() };
@@ -628,6 +640,7 @@ const routes = {
     if (!name) throw bad("Scrivi il nome del viaggio");
     if (db().trips.some((t) => cf(t.name) === cf(name))) throw bad(`Il viaggio '${name}' esiste già`);
     db().trips.push({ name, note: b.note || null, position: Math.max(-1, ...db().trips.map((t) => t.position)) + 1 });
+    ensureViaggi();
     if (b.copy_from) copyTripBudgets(name, b.copy_from);
     else TRIP_TEMPLATE.forEach((c) => addTripCategory(name, c, (b.budgets || {})[c] || 0));
     return { status: "ok", name };

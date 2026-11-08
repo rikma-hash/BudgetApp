@@ -147,7 +147,7 @@ async function read(file) {
       if (i >= 0) { expenses.splice(i, 1); dupes++; }
     }
   }
-  if (trips.length) addCat("Viaggi");
+  addCat("Viaggi");   // c'è sempre, anche senza viaggi
   expenses.forEach((e) => { if (e.category) e.category = categories.find((c) => cf(c) === cf(e.category)) || e.category; });
   const outMonths = months.filter((m) => m.year).map((m) => ({ month: monthKey(m.year, m.idx), incomes: m.incomes, carry: m.carry, carry_on: m.carry_on, budgets: m.budgets }));
   return { categories, months: outMonths, expenses, trips, subscriptions, dupes, moved };

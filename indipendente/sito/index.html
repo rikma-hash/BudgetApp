@@ -12,8 +12,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=44">
-<link rel="stylesheet" href="extra.css?v=b142fd5e">
+<link rel="stylesheet" href="style.css?v=45">
+<link rel="stylesheet" href="extra.css?v=33e50b16">
 <script>
   try {
     const p = JSON.parse(localStorage.getItem("prefs") || "{}");
@@ -24,7 +24,7 @@
   } catch {}
 </script>
 </head>
-<body data-app="app.js?v=44">
+<body data-app="app.js?v=45">
 <!-- accesso (versione indipendente): si vede solo finché non si è entrati -->
 <section class="login-screen" id="login" hidden>
   <div class="login-wrap">
@@ -84,7 +84,7 @@
 
 <div class="cols"><div class="col">
     <div class="hero card" id="hero"></div>
-    <div class="alerts" id="home-alerts" hidden></div>
+    <ul class="alerts" id="home-alerts" hidden></ul>
     <div class="excl" id="home-excl"></div>
 
     <div class="card">
@@ -313,6 +313,10 @@
       <h2>Zona pericolosa</h2>
       <p class="hint">Cancella spese, budget, viaggi e categorie di questo account.</p>
       <div class="acc-actions"><button class="secondary danger-text" type="button" id="acc-wipe">Cancella tutti i dati</button></div>
+      <div id="acc-delete-box">
+        <p class="hint">Elimina l'account: spariscono l'account (email e password) e tutti i suoi dati, per sempre.</p>
+        <div class="acc-actions"><button class="secondary danger-text" type="button" id="acc-delete">Elimina il mio account</button></div>
+      </div>
     </div>
     <div hidden><div id="offline-check"></div><div id="upd-box"></div></div>
     <div class="card">
@@ -474,6 +478,34 @@
   </form>
 </dialog>
 
+<dialog id="txdlg" class="small-dialog tx-dialog" aria-labelledby="tx-desc">
+  <div class="sheet-head">
+    <button type="button" class="text-btn" id="tx-edit">Modifica</button>
+    <span></span>
+    <button type="button" class="text-btn danger" id="tx-delete">Elimina</button>
+  </div>
+  <div class="tx-detail">
+    <span class="emoji" id="tx-emoji"></span>
+    <h3 id="tx-desc"></h3>
+    <div class="tx-amount" id="tx-amount"></div>
+    <p class="hint" id="tx-meta"></p>
+  </div>
+  <textarea id="tx-note" rows="5" placeholder="Note" aria-label="Note"></textarea>
+  <button type="button" class="primary" id="tx-close">Chiudi</button>
+</dialog>
+
+<dialog id="ntdlg" class="small-dialog">
+  <form method="dialog">
+    <h3>Nuovo viaggio</h3>
+    <p class="hint">Lo creo con le categorie di sempre (trasporto, alloggio, cibo…): il budget lo metti dopo, in Viaggi.</p>
+    <input id="nt-name" class="desc" placeholder="Nome del viaggio" maxlength="28" autocomplete="off">
+    <div class="dlg-actions">
+      <button type="button" data-close="cancel" class="secondary">Annulla</button>
+      <button value="ok" class="primary">Crea</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirm" class="small-dialog">
   <form method="dialog">
     <h3 id="confirm-title">Sei sicuro?</h3>
@@ -586,14 +618,14 @@
 </dialog>
 
 <div id="toast" role="status"></div>
-<script src="i18n.js?v=44"></script>
-<script src="config.js?v=b142fd5e"></script>
+<script src="i18n.js?v=45"></script>
+<script src="config.js?v=33e50b16"></script>
 <script src="vendor/supabase.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="store.js?v=b142fd5e"></script>
-<script src="server.js?v=b142fd5e"></script>
-<script src="excel.js?v=b142fd5e"></script>
-<script src="importer.js?v=b142fd5e"></script>
-<script src="login.js?v=b142fd5e"></script>
+<script src="store.js?v=33e50b16"></script>
+<script src="server.js?v=33e50b16"></script>
+<script src="excel.js?v=33e50b16"></script>
+<script src="importer.js?v=33e50b16"></script>
+<script src="login.js?v=33e50b16"></script>
 </body>
 </html>

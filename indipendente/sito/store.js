@@ -100,6 +100,15 @@ const Store = {
     this.normalize();
   },
 
+  /** Elimina l'account e tutti i suoi dati (funzione delete_my_account nel database, vedi schema.sql). */
+  async deleteAccount() {
+    if (this.mode !== "cloud") throw new Error("Non sei entrato con un account");
+    const { error } = await this.client.rpc("delete_my_account");
+    if (error) throw new Error(isNetworkError(error) ? "Niente connessione: riprova quando sei online" : /function|schema cache|not find/i.test(error.message) ? "Eliminazione non ancora attiva su questo server: chiedi a chi gestisce l'app" : error.message);
+    this.outbox = [];
+    await this.signOut();
+  },
+
   async signOut() {
     if (this.mode === "cloud") await this.client.auth.signOut().catch(() => {});
     localStorage.removeItem(K_MODE);
