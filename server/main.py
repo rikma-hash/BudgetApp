@@ -373,6 +373,19 @@ def months():
         }
 
 
+@app.post("/api/months/add")
+def add_month():
+    """Crea il foglio del mese dopo l'ultimo (con entrate, budget e abbonamenti copiati dall'ultimo mese)."""
+    out = {}
+
+    def do(wb):
+        day = X.next_month_day(wb)
+        ws, created = X.ensure_month(wb, day)
+        out.update(sheet=ws.title, created=created, date=day.isoformat())
+    write(do)
+    return {"status": "ok", **out}
+
+
 @app.get("/api/month")
 def month(sheet: str):
     with lock:

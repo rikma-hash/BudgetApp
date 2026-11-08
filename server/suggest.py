@@ -108,7 +108,8 @@ class Suggester:
             for w in words:
                 w = w.casefold()
                 if f" {w.strip()} " in padded or (len(w) > 4 and w.strip() in key):
-                    scores[cat] = max(scores.get(cat, 0), 0.75 if len(w) > 3 else 0.6)
+                    # a parità vince la parola più lunga, cioè più precisa ("carnet" batte "carne")
+                    scores[cat] = max(scores.get(cat, 0), (0.75 if len(w) > 3 else 0.6) + min(len(w.strip()), 30) / 1000)
         return scores
 
     def suggest(self, description: str, known: list[str], use_ai: bool = True) -> dict:
