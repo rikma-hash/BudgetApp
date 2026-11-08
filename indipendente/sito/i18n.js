@@ -12,6 +12,19 @@ const MONTHS_EN = ["January", "February", "March", "April", "May", "June", "July
 const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
 const EXACT = {
+  // pagamenti che si ripetono (8/11)
+  "Si ripete": "Repeats", "Ogni mese": "Every month", "Ogni 3 mesi": "Every 3 months", "Ogni anno": "Every year", "Personalizza…": "Custom…",
+  "Ogni": "Every", "Nei giorni": "On", "Finisce": "Ends", "Mai": "Never", "Il": "On", "Dopo": "After", "volte": "times", "Fatto": "Done",
+  "Ferma": "Stop", "Dal": "From", "Cambia…": "Change…", "giorno": "day", "giorni": "days", "settimana": "week", "settimane": "weeks",
+  "mese": "month", "mesi": "months", "anno": "year", "anni": "years", "Lu": "Mo", "Ma": "Tu", "Me": "We", "Gi": "Th", "Ve": "Fr", "Sa": "Sa", "Do": "Su",
+  "non finisce": "never ends", "finito": "ended", "Solo questa volta": "Only this time", "🔁 Pagamenti che si ripetono": "🔁 Repeating payments",
+  "Entrano da soli nel loro giorno (es. una tassa ogni 3 mesi). Li crei dalla schermata ＋ con \"Si ripete\". Tocca per cambiarli o fermarli: le spese già inserite restano.":
+    "They're added by themselves on their day (e.g. a tax every 3 months). Create them from the ＋ screen with \"Repeats\". Tap to change or stop them: expenses already added stay.",
+  "Nessuno. Nella schermata ＋ scegli \"Si ripete\".": "None. On the ＋ screen choose \"Repeats\".", "🔁 Previsti · non ancora nei totali": "🔁 Planned · not in the totals yet",
+  "Non ci sono altre volte: è finito.": "No more times: it's over.", "Pagamento fermato": "Payment stopped",
+  "✓ Salvato: vale per le prossime volte": "✓ Saved: applies to the next times", "Per cambiarlo serve il Mac acceso": "Changing it needs the Mac on",
+  "Non verrà più inserito. Le spese già inserite restano.": "It won't be added any more. Expenses already added stay.",
+  "L'ultimo giorno deve venire dopo l'inizio": "The last day must come after the start", "Scrivi nome e importo": "Enter name and amount",
   "Modifica": "Edit", "Note": "Notes", "Chiudi": "Close", "✓ Note salvate": "✓ Notes saved", "Note tolte": "Notes removed", "in attesa del Mac": "waiting for the Mac",
   "Scegli prima la categoria con Modifica": "First choose the category with Edit", "Togli l'avviso": "Dismiss",
   "＋ Mese": "＋ Month", "Per aggiungere un mese serve il Mac acceso": "Adding a month needs the Mac on",
@@ -219,6 +232,20 @@ const EXACT = {
 
 // frasi con parti variabili: [espressione, sostituzione]
 const PATTERNS = [
+  // pagamenti che si ripetono (8/11)
+  [/^(.*(?:ogni |volte in tutto|prossima |fino al ).*)$/, (m) => m
+    .replace(/ogni (\d+) (giorni|settimane|mesi|anni)/g, (_, n, u) => `every ${n} ${{ giorni: "days", settimane: "weeks", mesi: "months", anni: "years" }[u]}`)
+    .replace(/ogni (giorno|settimana|mese|anno)/g, (_, u) => `every ${{ giorno: "day", settimana: "week", mese: "month", anno: "year" }[u]}`)
+    .replace(/(\d+) volte in tutto/g, "$1 times in total").replace(/prossima /g, "next ").replace(/fino al /g, "until ")
+    .replace(/\b(lun|mar|mer|gio|ven|sab|dom)\b/g, (d) => ({ lun: "Mon", mar: "Tue", mer: "Wed", gio: "Thu", ven: "Fri", sab: "Sat", dom: "Sun" }[d]))
+    .replace(/si ripete/g, "repeats").replace(/Si ripete/g, "Repeats").replace(/^✓ Salvata in /, "✓ Saved in ")
+    .replace(/aggiunte (\d+) date passate/, "$1 past dates added")],
+  [/^Poi: (.+)$/, "Then: $1"],
+  [/^Volte: (.+)$/, "Dates: $1"], [/^Prossime: (.+)$/, "Next: $1"], [/^(.+) · ultima (.+)$/, "$1 · last $2"],
+  [/^⚠️ 1 data è già passata: la aggiungo subito$/, "⚠️ 1 date has already passed: I'll add it now"],
+  [/^⚠️ (\d+) date sono già passate: le aggiungo subito$/, "⚠️ $1 dates have already passed: I'll add them now"],
+  [/^Salva (.+) · si ripete$/, "Save $1 · repeats"],
+  [/^✓ Salvato · aggiunte (\d+) date passate$/, "✓ Saved · $1 past dates added"], [/^Fermare (.+)\?$/, "Stop $1?"],
   [/^✓ Aggiunto (.+): entrate e budget copiati dall'ultimo mese$/, "✓ Added $1: income and budget copied from the last month"],
   [/^✓ Viaggio (.+) creato$/, "✓ Trip $1 created"],
   [/^Senza (.+) · tocca l'occhio per rimetterl[oi]$/, "Without $1 · tap the eye to count again"],

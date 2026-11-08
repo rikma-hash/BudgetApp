@@ -2,8 +2,8 @@
 // Strategia "prima la copia": la pagina e i suoi file arrivano SUBITO dalla copia salvata (anche a Mac spento,
 // e senza attese che su iPhone, aprendo l'icona della Home, lasciano lo schermo vuoto); in sottofondo si scarica
 // la versione dal Mac e si aggiorna la copia. Quando esce una versione nuova di questo file l'app si ricarica da sola.
-const CACHE = "spese-indip-1678ddfe";
-const SHELL = ["/", "/i18n.js?v=46", "/app.js?v=46", "/style.css?v=46", "/extra.css?v=1678ddfe", "/config.js?v=1678ddfe", "/manifest.webmanifest", "/icon.svg", "/icon-180.png", "/icon-512.png", "/keywords.json", "/vendor/supabase.min.js", "/vendor/xlsx.full.min.js", "/store.js?v=1678ddfe", "/server.js?v=1678ddfe", "/excel.js?v=1678ddfe", "/importer.js?v=1678ddfe", "/login.js?v=1678ddfe"];
+const CACHE = "spese-indip-928175b9";
+const SHELL = ["/", "/i18n.js?v=47", "/app.js?v=47", "/style.css?v=47", "/extra.css?v=928175b9", "/config.js?v=928175b9", "/manifest.webmanifest", "/icon.svg", "/icon-180.png", "/icon-512.png", "/keywords.json", "/vendor/supabase.min.js", "/vendor/xlsx.full.min.js", "/store.js?v=928175b9", "/server.js?v=928175b9", "/excel.js?v=928175b9", "/importer.js?v=928175b9", "/login.js?v=928175b9"];
 
 // "scatola nera": ultimi eventi, letti dall'app e mandati al Mac quando torna raggiungibile (/api/diag)
 let diagQueue = Promise.resolve();

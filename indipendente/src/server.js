@@ -245,6 +245,7 @@ function renameLearned(from, to) {
 
 // ---------- spese: aggiungi / modifica / elimina ----------
 function installments(e) {
+  if (e.repeat) return [{ date: e.date, description: e.description.trim(), amount: r2(e.amount), note: repNote({ ...e.repeat, note: e.note }) }];
   const n = Math.max(1, Math.min(24, +e.split || 1));
   if (n <= 1) return [{ date: e.date, description: e.description.trim(), amount: r2(e.amount), note: e.note || null }];
   const part = r2(e.amount / n), out = [];
@@ -277,8 +278,20 @@ function addExpense(b) {
     first ||= e;
   });
   learn(b.description, cat);
+  let repeatAdded = 0;
+  if (b.repeat) {
+    const st = settings(), r = b.repeat;
+    st.recurring = st.recurring || [];
+    if (!st.recurring.some((x) => x.id === first.id)) {
+      st.recurring.push({ id: first.id, name: b.description.trim(), amount: r2(b.amount), category: cat, note: b.note || null, start: b.date,
+        every: Math.max(1, Math.min(99, +r.every || 1)), unit: ["day", "week", "month", "year"].includes(r.unit) ? r.unit : "month",
+        days: (r.days || []).map(Number), end: ["date", "count"].includes(r.end) ? r.end : "never", until: r.until || null,
+        count: r.count ? +r.count : null, last: b.date, created: isoToday() });
+    }
+    repeatAdded = applyRecurring().length;  // volte già passate (data d'inizio indietro nel tempo)
+  }
   const keys = monthKeys();
-  return { status: "saved", sheet: labelOf(key, keys), row: row(first.id), week: weekOf(first.date), category: cat, created_sheet: false, split: +b.split || 1 };
+  return { status: "saved", sheet: labelOf(key, keys), row: row(first.id), week: weekOf(first.date), category: cat, created_sheet: false, split: +b.split || 1, repeat_added: repeatAdded };
 }
 function findExpense(r, expect, trip = null) {
   const id = idOf.get(+r);
@@ -367,6 +380,65 @@ function applySubscriptions() {
   }
   return added;
 }
+
+// ---------- pagamenti che si ripetono (come server/recurring.py) ----------
+function repSeries(r, max = 2000) {
+  const [y0, m0, d0] = r.start.split("-").map(Number), out = [];
+  const every = Math.max(1, +r.every || 1), until = r.end === "date" && r.until ? r.until : null, count = r.end === "count" ? +r.count || 0 : 0;
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const push = (d) => { const x = iso(d); if ((count && out.length >= count) || (until && x > until) || out.length >= max) return false; out.push(x); return true; };
+  const keep = (n) => { const x = new Date(y0, m0 - 1 + n, 1, 12); x.setDate(Math.min(d0, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate())); return x; };
+  if (r.unit === "week") {
+    const start = new Date(y0, m0 - 1, d0, 12), wd = (start.getDay() + 6) % 7;
+    const days = [...new Set((r.days || []).map(Number))].sort((a, b) => a - b);
+    for (let k = 0; k < 5000; k++) for (const d of (days.length ? days : [wd])) {
+      const x = new Date(y0, m0 - 1, d0 - wd + k * 7 * every + d, 12);
+      if (x >= start && !push(x)) return out;
+    }
+    return out;
+  }
+  for (let k = 0; k < 5000; k++) {
+    const x = r.unit === "day" ? new Date(y0, m0 - 1, d0 + every * k, 12) : keep((r.unit === "year" ? 12 : 1) * every * k);
+    if (!push(x)) return out;
+  }
+  return out;
+}
+function repNote(r) {
+  const n = Math.max(1, +r.every || 1);
+  const u = { day: ["giorno", "giorni"], week: ["settimana", "settimane"], month: ["mese", "mesi"], year: ["anno", "anni"] }[r.unit] || ["mese", "mesi"];
+  return `🔁 Si ripete ${n === 1 ? `ogni ${u[0]}` : `ogni ${n} ${u[1]}`}` + (r.note ? ` · ${r.note}` : "");
+}
+const repNext = (r) => repSeries(r).find((d) => !r.last || d > r.last) || null;
+/** Volte arrivate al loro giorno e non ancora inserite → spese. */
+function applyRecurring() {
+  const today = isoToday(), added = [];
+  for (const r of settings().recurring || []) {
+    const due = repSeries(r).filter((d) => d <= today && (!r.last || d > r.last));
+    for (const date of due) {
+      ensureMonth(keyOf(date));
+      const cat = ensureCategory(r.category);
+      db().expenses.push({ id: uuid(), date, description: r.name, amount: r.amount, category: cat, note: repNote(r), trip: null });
+      added.push({ name: r.name, amount: r.amount, date, sheet: labelOf(keyOf(date)) });
+    }
+    if (due.length) r.last = due.at(-1);
+  }
+  if (added.length) Store.commit();
+  return added;
+}
+/** Volte future che cadono nel mese `key` (solo da mostrare, non nei totali). */
+function plannedIn(key) {
+  const today = isoToday(), out = [];
+  for (const r of settings().recurring || []) {
+    for (const date of repSeries(r)) {
+      if (date > key + "-31") break;
+      if (keyOf(date) === key && date > today && (!r.last || date > r.last)) {
+        out.push({ rid: r.id, date, description: r.name, amount: r.amount, category: r.category, note: repNote(r) });
+      }
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+const applyAuto = () => [...applySubscriptions(), ...applyRecurring()];
 
 // ---------- viaggi ----------
 const tripRow = (name) => { const t = db().trips.find((x) => x.name === name); if (!t) throw new HttpError(404, `Viaggio '${name}' non trovato`); return t; };
@@ -540,7 +612,23 @@ const routes = {
   },
   "GET /api/month": (q) => {
     const key = sheetKey(q.sheet), keys = monthKeys();
-    return { summary: summary(key, keys), transactions: transactions(key, keys).sort(byDateDesc), categories: catNames() };
+    return { summary: summary(key, keys), transactions: transactions(key, keys).sort(byDateDesc), categories: catNames(), planned: plannedIn(key) };
+  },
+  "GET /api/recurring": () => ({ items: (settings().recurring || []).map((r) => ({ ...r, next: repNext(r) })) }),
+  "POST /api/recurring/edit": (q, b) => {
+    const r = (settings().recurring || []).find((x) => x.id === b.id);
+    if (!r) throw new HttpError(404, "Pagamento non trovato");
+    if (!String(b.name || "").trim() || !(b.amount > 0)) throw bad("Scrivi nome e importo");
+    Object.assign(r, { name: b.name.trim(), amount: r2(b.amount), category: b.category || r.category, start: b.start || r.start,
+      every: Math.max(1, Math.min(99, +b.every || 1)), unit: ["day", "week", "month", "year"].includes(b.unit) ? b.unit : "month",
+      days: (b.days || []).map(Number), end: ["date", "count"].includes(b.end) ? b.end : "never", until: b.until || null, count: b.count ? +b.count : null });
+    const added = applyRecurring().length;
+    return { status: "ok", item: { ...r, next: repNext(r) }, added };
+  },
+  "POST /api/recurring/delete": (q, b) => {
+    const st = settings();
+    st.recurring = (st.recurring || []).filter((x) => x.id !== b.id);
+    return { status: "ok" };
   },
   "GET /api/year": () => { const y = year(); y.months.forEach((m) => delete m.key); return y; },
 
@@ -603,7 +691,7 @@ const routes = {
     return { status: "ok", added: applySubscriptions() };
   },
 
-  "GET /api/profile": () => { const { learned, subs_log, ...rest } = settings(); return rest; },
+  "GET /api/profile": () => { const { learned, subs_log, recurring, ...rest } = settings(); return rest; },
   "PUT /api/profile": (q, b) => { Object.assign(settings(), b); return { status: "ok" }; },
   "GET /api/balance": () => {
     const bal = settings().balance || {};
@@ -810,7 +898,7 @@ window.fetch = async (input, init = {}) => {
   }
 };
 
-window.SpeseServer = { applySubscriptions, monthKeys, labelOf, summary, year, catNames, suggest };
+window.SpeseServer = { applySubscriptions: applyAuto, monthKeys, labelOf, summary, year, catNames, suggest };
 // abbonamenti automatici: all'avvio e ogni mezz'ora (come il server sul Mac)
-setInterval(() => Store.mode && applySubscriptions(), 30 * 60 * 1000);
+setInterval(() => Store.mode && applyAuto(), 30 * 60 * 1000);
 })();

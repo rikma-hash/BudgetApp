@@ -688,6 +688,7 @@ async function openAdd(opts = {}) {
   setDay("0", today());
   setDayEnabled(true);
   setSplit(1);
+  setRep(null);
   renderWhere();
   setWhere(opts.trip || null);
   showSheet();
@@ -731,6 +732,7 @@ function setWhere(trip) {
   sheet.cats = t ? t.categories.filter((c) => !c.virtual).map((c) => c.category) : knownCats();
   $("sheet-title").textContent = sheet.mode === "edit" ? "Modifica spesa" : trip ? `${LANG === "en" ? "Expense" : "Spesa"} · ${trip}` : "Nuova spesa";
   $("split-box").hidden = sheet.mode === "edit" || !!trip;
+  $("repeat-box").hidden = sheet.mode === "edit" || !!trip;
   $("frequent").hidden = !!trip || sheet.mode === "edit" || !!$("desc").value.trim() || !quickItems.length;
   if (!manualPick || (selected && !sheet.cats.some((c) => c.toLowerCase() === selected.category.toLowerCase()))) {
     selected = null; manualPick = false; catTapped = false;
@@ -763,6 +765,7 @@ function openEdit(t, cats, editable, onDone, trip = null) {
   setDayEnabled(editable);
   $("where").hidden = true;
   $("split-box").hidden = true;
+  $("repeat-box").hidden = true;
   renderCats();
   showSheet();
 }
@@ -1092,7 +1095,8 @@ function updateSave() {
   const ok = amount > 0 && selected?.category;  // senza nome si usa quello della categoria
   const n = splitActive() ? splitN : 1;
   $("save").disabled = !ok;
-  $("save").textContent = sheet.mode === "edit" ? "Salva modifiche" : amount > 0 ? `Salva ${eur(amount)}${n > 1 ? ` in ${n} rate` : ""}` : "Salva";
+  $("save").textContent = sheet.mode === "edit" ? "Salva modifiche" : amount > 0 ? `Salva ${eur(amount)}${n > 1 ? ` in ${n} rate` : repActive() ? " · si ripete" : ""}` : "Salva";
+  $("rep-hint").innerHTML = typeof repHint === "function" ? repHint(amount) : "";
   $("split-hint").innerHTML = n > 1 && amount > 0 ? splitText(amount, n) : n > 1 ? esc(`Una rata al mese per ${n} mesi, a partire dalla data scelta. Scrivi l'importo per vedere quanto al mese.`) : "";
 }
 
@@ -1105,6 +1109,7 @@ const splitActive = () => sheet.mode === "add" && !sheet.trip && splitN > 1;
 function setSplit(n, custom = false) {
   splitN = Math.max(1, Math.min(SPLIT_MAX, Math.round(n) || 1));
   splitCustom = custom;
+  if (splitN > 1 && rep) setRep(null);
   document.querySelectorAll("#split-pills button").forEach((b) =>
     b.classList.toggle("on", custom ? b.dataset.n === "custom" : +b.dataset.n === splitN));
   $("split-custom").hidden = !custom;
@@ -1140,6 +1145,162 @@ $("split-plus").addEventListener("click", () => setSplit(splitN + 1, true));
 $("split-n").addEventListener("change", () => setSplit(Math.max(2, parseInt($("split-n").value, 10) || 2), true));
 $("split-until").addEventListener("change", () => setSplit(+$("split-until").value, true));
 $("amount").addEventListener("input", updateSave);
+
+// ---------- pagamento che si ripete (es. 50 € ogni 3 mesi dal 10 gen, fino a… / per N volte) ----------
+// Questa spesa è la prima volta; le altre le inserisce il server da sole nel loro giorno (server/recurring.py).
+
+let rep = null;  // {every, unit, days, end, until, count}
+const repActive = () => sheet.mode === "add" && !sheet.trip && !!rep;
+const UNIT_NAMES = { day: ["giorno", "giorni"], week: ["settimana", "settimane"], month: ["mese", "mesi"], year: ["anno", "anni"] };
+const WEEKDAYS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+function addMonthsKeep(d, n) {
+  const x = new Date(d.getFullYear(), d.getMonth() + n, 1, 12);
+  x.setDate(Math.min(d.getDate(), new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate()));
+  return x;
+}
+/** Date della serie (come `series` in server/recurring.py), al massimo `max`. */
+function repSeries(r, startIso, max = 400) {
+  const start = new Date(startIso + "T12:00"), out = [];
+  const every = Math.max(1, +r.every || 1);
+  const until = r.end === "date" && r.until ? r.until : null, count = r.end === "count" ? +r.count || 0 : 0;
+  const push = (d) => {
+    const iso = isoDay(d);
+    if ((count && out.length >= count) || (until && iso > until) || out.length >= max) return false;
+    out.push(iso); return true;
+  };
+  if (r.unit === "week") {
+    const days = [...new Set((r.days || []).map(Number))].sort((a, b) => a - b);
+    const dd = days.length ? days : [(start.getDay() + 6) % 7];
+    for (let k = 0; k < 3000; k++) {
+      for (const d of dd) {
+        const x = new Date(start.getFullYear(), start.getMonth(), start.getDate() - (start.getDay() + 6) % 7 + k * 7 * every + d, 12);
+        if (x >= start && !push(x)) return out;
+      }
+    }
+    return out;
+  }
+  for (let k = 0; k < 3000; k++) {
+    const x = r.unit === "day" ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + every * k, 12)
+      : addMonthsKeep(start, (r.unit === "year" ? 12 : 1) * every * k);
+    if (!push(x)) return out;
+  }
+  return out;
+}
+function repEveryText(r) {
+  const n = Math.max(1, +r.every || 1), u = UNIT_NAMES[r.unit] || UNIT_NAMES.month;
+  let t = n === 1 ? `ogni ${u[0]}` : `ogni ${n} ${u[1]}`;
+  if (r.unit === "week" && (r.days || []).length) t += " · " + [...r.days].sort((a, b) => a - b).map((d) => WEEKDAYS[d]).join(", ");
+  return t;
+}
+const fmtShortDay = (iso) => new Date(iso + "T12:00").toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: iso.slice(0, 4) !== today().slice(0, 4) ? "numeric" : undefined });
+function repEndText(r) {
+  return r.end === "date" && r.until ? `fino al ${fmtShortDay(r.until)}` : r.end === "count" ? `${r.count} volte in tutto` : "non finisce";
+}
+function repHint(amount) {
+  if (!repActive()) return "";
+  const dates = repSeries(rep, chosenDate(), 60);
+  const next = dates.slice(1, 4).map(fmtShortDay).join(", ");
+  const past = dates.slice(1).filter((d) => d <= today()).length;
+  return `<b class="split-big">${esc((amount > 0 ? eur(amount) + " " : "") + repEveryText(rep))}</b>`
+    + `<span>${esc(repEndText(rep))}</span>`
+    + `<span>${esc(next ? `Poi: ${next}${dates.length > 4 ? "…" : ""}` : "Solo questa volta")}</span>`
+    + (past ? `<span>${esc(past === 1 ? "⚠️ 1 data è già passata: la aggiungo subito" : `⚠️ ${past} date sono già passate: le aggiungo subito`)}</span>` : "")
+    + ` <button type="button" class="text-btn" id="rep-change">Cambia…</button>`;
+}
+function setRep(r) {
+  rep = r;
+  if (r && splitN > 1) setSplit(1);
+  const preset = r && r.end === "never" && !(r.days || []).length && document.querySelector(`#rep-pills [data-rep="${r.every}-${r.unit}"]`);
+  document.querySelectorAll("#rep-pills button").forEach((b) =>
+    b.classList.toggle("on", !r ? b.dataset.rep === "" : preset ? b === preset : b.dataset.rep === "custom"));
+  updateSave();
+}
+$("rep-pills").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-rep]"); if (!b) return;
+  const v = b.dataset.rep;
+  if (v === "custom") { const r = await editRepeat(rep || { every: 1, unit: "month", days: [], end: "never" }, { start: chosenDate() }); if (r) setRep(r); return; }
+  if (!v) return setRep(null);
+  const [n, unit] = v.split("-");
+  setRep({ every: +n, unit, days: [], end: "never", until: null, count: null });
+});
+$("rep-hint").addEventListener("click", async (e) => {
+  if (!e.target.closest("#rep-change")) return;
+  const r = await editRepeat(rep, { start: chosenDate() });
+  if (r) setRep(r);
+});
+
+/** Finestra "Si ripete" (come il calendario): ogni N giorni/settimane/mesi/anni, giorni della settimana, fine.
+ *  Con `opts.rule` serve anche a cambiare un pagamento già salvato (nome, importo, categoria, dal, Ferma). */
+function editRepeat(r, opts = {}) {
+  return new Promise((resolve) => {
+    const dlg = $("rpdlg"), rule = opts.rule || null;
+    $("rp-title").textContent = rule ? rule.name : "Si ripete";
+    $("rp-rule").hidden = !rule; $("rp-delete").hidden = !rule;
+    $("rp-actions").classList.toggle("three", !!rule);
+    if (rule) {
+      $("rp-name").value = rule.name; $("rp-amount").value = amountIn(rule.amount); $("rp-start").value = rule.start;
+      const cats = knownCats(), has = cats.some((c) => c.toLowerCase() === rule.category.toLowerCase());
+      $("rp-cat").innerHTML = (has ? cats : [rule.category, ...cats]).map((c) =>
+        `<option ${c.toLowerCase() === rule.category.toLowerCase() ? "selected" : ""}>${esc(c)}</option>`).join("");
+    }
+    const startIso = () => (rule ? $("rp-start").value || rule.start : opts.start);
+    let days = [...(r.days || [])];
+    $("rp-n").value = r.every || 1;
+    $("rp-unit").value = r.unit || "month";
+    $("rp-until").value = r.until || isoDay(addMonthsKeep(new Date(startIso() + "T12:00"), 12));
+    $("rp-count").value = r.count || 4;
+    dlg.querySelector(`input[name=rp-end][value=${r.end || "never"}]`).checked = true;
+    const read = () => ({
+      every: Math.min(99, Math.max(1, parseInt($("rp-n").value, 10) || 1)), unit: $("rp-unit").value,
+      days: $("rp-unit").value === "week" ? [...days].sort((a, b) => a - b) : [],
+      end: dlg.querySelector("input[name=rp-end]:checked").value,
+      until: $("rp-until").value || null, count: Math.min(999, Math.max(1, parseInt($("rp-count").value, 10) || 1)),
+    });
+    const paint = () => {
+      const x = read();
+      [...$("rp-unit").options].forEach((o) => (o.textContent = tr(UNIT_NAMES[o.value][x.every === 1 ? 0 : 1])));
+      $("rp-days-box").hidden = x.unit !== "week";
+      const def = (new Date(startIso() + "T12:00").getDay() + 6) % 7;
+      $("rp-days").querySelectorAll("button").forEach((b) => b.classList.toggle("on", (days.length ? days : [def]).includes(+b.dataset.d)));
+      dlg.querySelectorAll(".rp-ends label").forEach((l) => l.classList.toggle("off", !l.querySelector("input[type=radio]").checked));
+      const all = repSeries(x, startIso(), 400);
+      const from = rule ? all.filter((d) => d > (rule.last || "")) : all;
+      const last = x.end !== "never" && all.length ? all[all.length - 1] : null;
+      $("rp-preview").textContent = !from.length ? "Non ci sono altre volte: è finito."
+        : `${rule ? "Prossime" : "Volte"}: ${from.slice(0, 4).map(fmtShortDay).join(", ")}${from.length > 4 ? "…" : ""}`
+          + (last ? ` · ultima ${fmtShortDay(last)}` : "");
+    };
+    dlg.oninput = dlg.onchange = paint;
+    dlg.onfocusin = (e) => {  // tocco sulla data o sul numero di volte = scelgo quella fine
+      const l = e.target.closest(".rp-ends label");
+      if (l && e.target.type !== "radio") { l.querySelector("input[type=radio]").checked = true; paint(); }
+    };
+    $("rp-minus").onclick = () => { $("rp-n").value = Math.max(1, (parseInt($("rp-n").value, 10) || 1) - 1); paint(); };
+    $("rp-plus").onclick = () => { $("rp-n").value = Math.min(99, (parseInt($("rp-n").value, 10) || 1) + 1); paint(); };
+    $("rp-days").onclick = (e) => {
+      const b = e.target.closest("button[data-d]"); if (!b) return;
+      const d = +b.dataset.d, def = (new Date(startIso() + "T12:00").getDay() + 6) % 7;
+      if (!days.length) days = [def];
+      days = days.includes(d) ? days.filter((x) => x !== d) : [...days, d];
+      paint();
+    };
+    paint();
+    dlg.onclose = () => {
+      if (dlg.returnValue === "delete") return resolve({ action: "delete" });
+      if (dlg.returnValue !== "ok") return resolve(null);
+      const x = read();
+      if (x.end !== "date") x.until = null;
+      if (x.end !== "count") x.count = null;
+      if (x.end === "date" && (!x.until || x.until < startIso())) { toast("L'ultimo giorno deve venire dopo l'inizio"); return resolve(null); }
+      if (!rule) return resolve(x);
+      const name = $("rp-name").value.trim(), amount = parseAmount($("rp-amount").value);
+      if (!name || !(amount > 0)) { toast("Scrivi nome e importo"); return resolve(null); }
+      resolve({ action: "save", item: { ...x, id: rule.id, name, amount, category: $("rp-cat").value, start: startIso() } });
+    };
+    dlg.returnValue = "";
+    dlg.showModal();
+  });
+}
 
 async function send(exp) {
   const r = await api(exp.trip ? "/api/trips/expense" : "/api/expenses", { method: "POST", body: exp });
@@ -1201,6 +1362,7 @@ $("form").addEventListener("submit", async (ev) => {
   const exp = { id: uid(), ...base };
   if (sheet.trip) exp.trip = sheet.trip;
   else if (splitActive()) exp.split = splitN;
+  else if (repActive()) exp.repeat = { ...rep };
   if (selected.new) {
     const budget = await askNewCategory(selected.category, sheet.trip);
     if (budget === null) return;
@@ -1209,7 +1371,9 @@ $("form").addEventListener("submit", async (ev) => {
   $("save").disabled = true;
   try {
     const r = await send(exp);
-    toast(r.status === "queued" ? r.reason : r.trip ? `✓ Salvata nel viaggio ${r.trip}` : r.split > 1 ? `✓ Divisa in ${r.split} rate in ${r.category}` : `✓ Salvata in ${r.category}${r.created_sheet ? " · nuovo mese creato" : ""}`);
+    toast(r.status === "queued" ? r.reason : r.trip ? `✓ Salvata nel viaggio ${r.trip}` : r.split > 1 ? `✓ Divisa in ${r.split} rate in ${r.category}`
+      : exp.repeat ? `✓ Salvata in ${r.category} · si ripete ${repEveryText(exp.repeat)}${r.repeat_added ? ` · aggiunte ${r.repeat_added} date passate` : ""}`
+      : `✓ Salvata in ${r.category}${r.created_sheet ? " · nuovo mese creato" : ""}`);
   } catch (err) {
     if (!err.network) { toast(failMsg(err)); updateSave(); return; }
     setQueue([...queue(), exp]);
@@ -1379,7 +1543,20 @@ function renderMonth() {
     return `<div class="group-head"><span>${w ? "Settimana " + w + weekRange(w) : "Senza data"}</span><span>${eur(tot)}</span></div>
       <div class="card group"><ul class="tx-list">${items.map((t) => { flat.push(t); return txRow(t, idx++); }).join("")}</ul></div>`;
   }).join("") : `<p class="empty">Nessuna spesa${catFilter ? " in questa categoria" : ""}.</p>`;
-  $("month-list").onclick = (e) => {
+  const planned = (monthData.planned || []).filter((t) => !catFilter || (t.category || "").toLowerCase() === catFilter.toLowerCase());
+  if (planned.length) {
+    $("month-list").insertAdjacentHTML(weeks.length ? "afterbegin" : "beforeend", `<div class="group-head"><span>🔁 Previsti · non ancora nei totali</span><span>${eur(planned.reduce((a, t) => a + t.amount, 0))}</span></div>
+      <div class="card group"><ul class="tx-list">${planned.map((t, i) => `<li data-p="${i}" class="planned"><span class="emoji">${emoji(t.category)}</span>
+        <div class="what"><b>${esc(t.description)}</b><span>${esc(t.category)} · ${fmtDay(t.date)} · ${esc(t.note)}</span></div>
+        <span class="amt">${eur(t.amount)}</span></li>`).join("")}</ul></div>`);
+  }
+  $("month-list").onclick = async (e) => {
+    const p = e.target.closest("li[data-p]");
+    if (p) {
+      try { repData = (await api("/api/recurring")).items || []; } catch {}
+      const x = repData.find((r) => r.id === planned[+p.dataset.p].rid);
+      return x ? openRule(x) : toast("Per cambiarlo serve il Mac acceso");
+    }
     const li = e.target.closest("li[data-i]"); if (!li) return;
     const t = flat[+li.dataset.i];
     if (t.trip) return go("trips", { trip: t.trip });
@@ -2451,8 +2628,40 @@ function editSub(x) {
 
 let catManage = [];
 
+// ================= PAGAMENTI CHE SI RIPETONO =================
+
+let repData = [];
+async function loadRep() {
+  try { repData = (await api("/api/recurring")).items || []; }
+  catch (err) { $("rep-list").innerHTML = `<li class="empty" style="display:block">${esc(failMsg(err))}</li>`; return; }
+  $("rep-list").innerHTML = repData.map((x, i) => `<li><button type="button" class="pick" data-i="${i}">
+    <span class="emoji">${emoji(x.category)}</span><span class="name">${esc(x.name)}<small class="tag-sub">${eur(x.amount)} · ${esc(repEveryText(x))}${x.end !== "never" ? " · " + esc(repEndText(x)) : ""} · ${esc(x.next ? "prossima " + fmtShortDay(x.next) : "finito")}</small></span></button></li>`).join("")
+    || `<li class="empty" style="display:block">Nessuno. Nella schermata ＋ scegli "Si ripete".</li>`;
+}
+async function openRule(x) {
+  const res = await editRepeat(x, { rule: x });
+  if (!res) return;
+  try {
+    if (res.action === "delete") {
+      if (!(await askConfirm(`Fermare ${x.name}?`, "Non verrà più inserito. Le spese già inserite restano.", "Ferma"))) return;
+      await api("/api/recurring/delete", { method: "POST", body: { id: x.id } });
+      toast("Pagamento fermato");
+    } else {
+      const r = await api("/api/recurring/edit", { method: "POST", body: res.item });
+      toast(r.added ? `✓ Salvato · aggiunte ${r.added} date passate` : "✓ Salvato: vale per le prossime volte");
+      if (r.added) refresh();
+    }
+  } catch (err) { toast(err.network ? "Per cambiarlo serve il Mac acceso" : failMsg(err)); }
+  loadRep();
+  if (view === "history" && monthData) showMonth(monthData.summary.sheet, true);
+}
+$("rep-list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-i]"); if (b) openRule(repData[+b.dataset.i]);
+});
+
 async function loadCatManage() {
   loadSubs();
+  loadRep();
   try {
     const q = budgetTarget?.sheet ? "?sheet=" + encodeURIComponent(budgetTarget.sheet) : "";
     const r = await api("/api/categories" + q);

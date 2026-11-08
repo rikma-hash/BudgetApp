@@ -628,3 +628,24 @@ body.has-plan-bar { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .pills .add-month { border: 1.5px dashed var(--line, var(--muted)); background: transparent; color: var(--accent); font-weight: 600; }
 .tx-dialog .sheet-head .text-btn:first-child { justify-self: start; }
 .tx-dialog .sheet-head .text-btn:last-child { justify-self: end; }
+
+/* pagamenti che si ripetono (8/11) */
+.rp-dialog { max-height: 90vh; overflow-y: auto; }
+.rp-dialog .field input[type=date], #rp-until { width: auto; min-width: 140px; }
+.rp-every { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 16px; }
+.rp-every select { max-width: none; flex: 1; }
+.rp-days { padding: 6px 0; font-size: 16px; }
+#rp-days { display: flex; gap: 5px; margin-top: 8px; }
+#rp-days button { flex: 1; aspect-ratio: 1; max-width: 40px; border-radius: 50%; background: var(--soft); color: var(--ink); font-size: 13px; font-weight: 650; padding: 0; }
+#rp-days button.on { background: var(--accent); color: var(--accent-ink); }
+.rp-ends { display: grid; gap: 4px; }
+.rp-ends label { display: flex; align-items: center; gap: 10px; min-height: 48px; font-size: 16px; }
+.rp-ends input[type=radio] { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; flex: none; }
+.rp-ends input:not([type=radio]) { font: inherit; font-weight: 600; background: var(--soft); border: 0; border-radius: 10px; padding: 9px 10px; color: var(--ink); }
+#rp-count { width: 56px; text-align: center; }
+.rp-ends label.off input:not([type=radio]) { opacity: .45; }
+#rp-preview { font-size: 14px; margin: 10px 0 0; }
+#rep-hint b { color: var(--ink); }
+.tx-list li.planned { opacity: .5; }
+.tx-list li.planned .amt::before { content: "≈ "; font-weight: 400; }
+#rep-hint span { display: block; margin-top: 2px; }
